@@ -34,14 +34,14 @@ $(document).on('click', '.mdui-tab a', function (event) {
     $(this).addClass('mdui-tab-active');
 });
 
-// fetch('https://v1.hitokoto.cn')
-//     .then(response => response.json())
-//     .then(data => {
-//         const hitokoto = document.querySelector('#hitokoto_text');
-//         hitokoto.href = `https://hitokoto.cn/?uuid=${data.uuid}`;
-//         hitokoto.innerText = data.hitokoto;
-//     })
-//     .catch(error => {
-//         const hitokoto = document.querySelector('#hitokoto_text');
-//         hitokoto.innerText = `一言获取失败: ${error}`;
-//     });
+fetch('https://v1.hitokoto.cn')
+    .then(response => response.json())
+    .then(data => {
+        const hitokoto = document.querySelector('#hitokoto_text');
+        hitokoto.href = `https://hitokoto.cn/?uuid=${data.uuid}`;
+        hitokoto.innerText = data.hitokoto;
+    })
+    .catch(error => {
+        const hitokoto = document.querySelector('#hitokoto_text');
+        hitokoto.innerText = `一言获取失败: ${error}`;
+    });
