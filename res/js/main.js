@@ -42,6 +42,5 @@ fetch('https://v1.hitokoto.cn')
         hitokoto.innerText = data.hitokoto;
     })
     .catch(error => {
-        const hitokoto = document.querySelector('#hitokoto_text');
-        hitokoto.innerText = `一言获取失败: ${error}`;
+        $('#hitokoto_text').text(`一言获取失败: ${error}`);
     });

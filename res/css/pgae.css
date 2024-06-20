@@ -15,6 +15,11 @@
     /* 鼠标离开时的反向旋转动画 */
 }
 
+article {
+    padding: 10px;
+    border-radius: 10px;
+}
+
 #page-2 .item {
     padding-bottom: 8px;
 }

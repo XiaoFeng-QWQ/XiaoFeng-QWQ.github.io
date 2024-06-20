@@ -29,36 +29,32 @@ function showPageHtml() {
                 }
                 const readmeText = await readmeResponse.text();
                 const html = `
-                <div>
-                    <img class="mdui-img-circle" style="max-height: 12rem;" src="${data.avatar_url}" />
-                    <article class="animate__animated animate__fadeInLeft">${marked.parse(readmeText)}</article>
-                </div>
+                <img class="mdui-img-circle" style="max-height: 12rem;" src="${data.avatar_url}" />
+                <article class="animate__animated animate__fadeInLeft">${marked.parse(readmeText)}</article>
                 `;
                 page1Element.html(html);
             } catch (error) {
                 console.error(error);
                 const html = `
-                <div>
-                    <img class="mdui-img-circle" style="max-height: 12rem;" src="https://avatars.githubusercontent.com/u/118364173?v=4">
-                    <article class="animate__animated animate__fadeInLeft"><h2>Hi there 👋</h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Base Info</th>
-                                    <th>Dashboard Data</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>
-                                        __Hi, I am XiaoFeng-QWQ  __<br><br>1.   I am from China!<br>2.   I like to write code. I don't really play games, okay<br>3.   How to reach me: <a href="mailto:1432777209@qq.com">1432777209@qq.com</a><br></td>
-                                    <td><a href="https://github.com/anuraghazra/github-readme-stats"><img src="https://api-github-readme-stats.dfggmc.top/api?username=XiaoFeng-QWQ&amp;show_icons=true" alt="XiaoFeng-QWQ's github stats"></a>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </article>
-                </div>
+                <img class="mdui-img-circle" style="max-height: 12rem;" src="https://avatars.githubusercontent.com/u/118364173?v=4">
+                <article class="animate__animated animate__fadeInLeft"><h2>Hi there 👋</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Base Info</th>
+                                <th>Dashboard Data</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    __Hi, I am XiaoFeng-QWQ  __<br><br>1.   I am from China!<br>2.   I like to write code. I don't really play games, okay<br>3.   How to reach me: <a href="mailto:1432777209@qq.com">1432777209@qq.com</a><br></td>
+                                <td><a href="https://github.com/anuraghazra/github-readme-stats"><img src="https://api-github-readme-stats.dfggmc.top/api?username=XiaoFeng-QWQ&amp;show_icons=true" alt="XiaoFeng-QWQ's github stats"></a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </article>
                 `;
                 page1Element.html(html);
             }
