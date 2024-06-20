@@ -1,0 +1,18 @@
+<div class="mdui-container mdui-typo animate__animated animate__fadeInDown">
+    <div class="mdui-tab mdui-tab-centered">
+        <a data-pjax-url="/" class="mdui-ripple">Home</a>
+        <a data-pjax-url="/pages/blog.html" class="mdui-ripple">Blog</a>
+        <a data-pjax-url="/pages/projects.html" class="mdui-ripple">Projects</a>
+    </div>
+</div>
+
+<script>
+    $(window).on('scroll', function () {
+        var scrollTop = $(this).scrollTop();
+        if (scrollTop > 0) {
+            $('header').addClass('box-shadow');
+        } else {
+            $('header').removeClass('box-shadow');
+        }
+    });
+</script>
