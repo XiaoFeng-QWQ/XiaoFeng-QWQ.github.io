@@ -4,9 +4,3 @@
 [submodule "projects/Picture-crash"]
 	path = projects/Picture-crash
 	url = https://github.com/XiaoFeng-QWQ/Picture-crash
-
-# Set the default behavior, in case people don't have core.autocrlf set.
-* text=auto
-
-# Explicitly declare files that should always use LF on checkout.
-*.gitmodules text eol=lf
