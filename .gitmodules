@@ -1,0 +1,6 @@
+[submodule "projects/music-player"]
+	path = projects/music-player
+	url = https://github.com/XiaoFeng-QWQ/music-player
+[submodule "projects/Picture-crash"]
+	path = projects/Picture-crash
+	url = https://github.com/XiaoFeng-QWQ/Picture-crash
