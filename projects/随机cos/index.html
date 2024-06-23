@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>COSPLAY 图片展示</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.css" rel="stylesheet">
+    <style>
+        #gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        #gallery a {
+            display: block;
+            text-decoration: none;
+        }
+
+        #gallery img {
+            width: 100%;
+            height: auto;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+        }
+
+        #gallery img:hover {
+            transform: scale(1.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>请求中……</h1>
+    <div id="gallery"></div>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.js"></script>
+    <script>
+        // 调用 API 并处理响应数据
+        $.ajax({
+            url: 'https://api.lolimi.cn/API/cosplay/api.php',
+            method: 'GET',
+            dataType: 'json',
+            success: function (data) {
+                if (data.code === "1") {
+                    const gallery = $("#gallery");
+                    $('h1').text(data.data.Title);
+                    $.each(data.data.data, function (index, url) {
+                        const link = $("<a></a>").attr({
+                            href: url,
+                            "data-fancybox": "cosplay-gallery"
+                        });
+                        const img = $("<img>").attr("src", url);
+                        link.append(img);
+                        gallery.append(link);
+                    });
+                } else {
+                    $('h1').text('Failed to fetch images');
+                }
+            },
+            error: function (xhr, status, error) {
+                $('h1').text('Error: ' + error);
+            }
+        });
+    </script>
+
+</body>

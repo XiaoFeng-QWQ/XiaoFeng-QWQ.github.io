@@ -1,0 +1,75 @@
+/* 通用样式重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* 清除链接样式 */
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+/* 清除列表样式 */
+ul,
+ol {
+    list-style: none;
+}
+
+/* 清除表单样式 */
+input,
+button,
+textarea,
+select {
+    background-color: transparent;
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+}
+
+/* 清除图片样式 */
+img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* 设置全屏背景图 */
+body {
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-size: cover;
+    background-color: #595959;
+}
+
+.tips {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: #fff;
+    font-size: 16px;
+    z-index: 1;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.tips span {
+    cursor: pointer;
+    color: #fff;
+    text-decoration: underline;
+}
+
+.tips span:hover {
+    color: red;
+    text-decoration: underline;
+}
+
+.info {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    color: #fff;
+}
