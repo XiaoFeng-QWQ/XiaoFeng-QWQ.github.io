@@ -1,3 +1,1 @@
-用MDUI写的
-
-https://XiaoFeng-QWQ.github.io
+次项目已迁移至 [XiaoFeng-QWQ](https://github.com/XiaoFeng-QWQ/XiaoFeng-QWQ)
