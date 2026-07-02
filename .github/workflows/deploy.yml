@@ -2,29 +2,52 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]      # 当推送到 main 分支时触发
+  workflow_dispatch:      # 允许手动触发
 
+# 设置 GITHUB_TOKEN 的权限，允许部署到 Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# 防止多个并发部署任务冲突
+concurrency:
+  group: pages
+  cancel-in-progress: false   # 改为 false，让正在进行的部署完成，而不是强制取消
+
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'          # 缓存 npm 依赖，加速构建
+
+      - name: 安装依赖
+        run: npm ci             # 使用 package-lock.json 精确安装
+
+      - name: 构建项目
+        run: npm run build      # Vite 默认构建命令
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist          # Vite 默认输出目录
+
   deploy:
+    needs: build
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '24'
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: './dist'
-      - uses: actions/deploy-pages@v4
+      - name: 部署到 GitHub Pages
         id: deployment
+        uses: actions/deploy-pages@v4
