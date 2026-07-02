@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@variant dark (&:is(.dark *));
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* 隐藏滚动条 */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* --- View Transitions API 主题切换重置 --- */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+    will-change: clip-path;
+}
+
+.theme-transitioning *,
+.theme-transitioning ::before,
+.theme-transitioning ::after {
+    backdrop-filter: none !important;
+    transition: none !important;
+}
+
+/* --- 极客级物理滑动切换动画帧（引入 Z 轴缩放与景深羽化，打造三维层次感） --- */
+@keyframes slide-up-in {
+    from {
+        opacity: 0;
+        transform: translateY(24px) scale(0.96);
+        filter: blur(3px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes slide-up-out {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(-24px) scale(0.96);
+        filter: blur(3px);
+    }
+}
+
+@keyframes slide-down-in {
+    from {
+        opacity: 0;
+        transform: translateY(-24px) scale(0.96);
+        filter: blur(3px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes slide-down-out {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(24px) scale(0.96);
+        filter: blur(3px);
+    }
+}
+
+/* 
+   非对称时间与减速曲线（Stripe / Linear 质感）
+   进场稍微拉长以展现空间缩放和聚焦过程，出场保持轻快防止阻滞感
+*/
+.animate-slide-up {
+    animation: slide-up-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-out-up {
+    animation: slide-up-out 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-down {
+    animation: slide-down-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-out-down {
+    animation: slide-down-out 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
