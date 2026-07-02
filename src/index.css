@@ -9,6 +9,121 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* 全局隐藏默认指针，且防止触发系统多余样式 */
+body,
+a,
+button,
+input,
+[role="button"],
+.clickable {
+    cursor: none !important;
+}
+
+/* 自定义鼠标指针 - 优雅外圈 */
+.cursor-ring {
+    position: fixed;
+    width: 18px;
+    height: 18px;
+    border: 1px solid rgba(115, 115, 115, 0.3);
+    /* 柔和中性边界 */
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    /* 使用精心调校的缓动曲线，实现高级的随动阻尼感 */
+    transition:
+        width 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+        height 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 0.22s ease,
+        border-color 0.22s ease,
+        opacity 0.2s ease;
+}
+
+/* 明亮模式下的基础外圈样式 */
+.cursor-ring {
+    border-color: rgba(23, 23, 23, 0.2);
+    background-color: transparent;
+}
+
+/* 暗黑模式下的基础外圈样式 */
+.dark .cursor-ring {
+    border-color: rgba(245, 245, 245, 0.25);
+    background-color: transparent;
+}
+
+/* 自定义鼠标指针 - 精确内点 */
+.cursor-dot {
+    position: fixed;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition:
+        transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 0.2s ease,
+        width 0.15s ease,
+        height 0.15s ease;
+}
+
+/* 明/暗模式下的内点颜色 */
+.cursor-dot {
+    background-color: rgba(23, 23, 23, 0.85);
+}
+
+.dark .cursor-dot {
+    background-color: rgba(245, 245, 245, 0.9);
+}
+
+/* ─── 悬停状态 (Hover) ─── */
+/* 外圈向外优雅扩散，并填充极细微的背景色，形成聚焦光晕 */
+.cursor-ring.hover {
+    width: 36px;
+    height: 36px;
+    border-color: rgba(115, 115, 115, 0.45);
+    background-color: rgba(115, 115, 115, 0.04);
+}
+
+.dark .cursor-ring.hover {
+    border-color: rgba(115, 115, 115, 0.5);
+    background-color: rgba(115, 115, 115, 0.06);
+}
+
+/* 悬停时，内点略微收敛，减少视觉干扰 */
+.cursor-dot.hover {
+    width: 3px;
+    height: 3px;
+    opacity: 0.7;
+}
+
+/* ─── 点击状态 (Click) ─── */
+/* 点击时，外圈快速向内收缩并抱紧内点，模拟物理按压的向心力反馈 */
+.cursor-ring.click {
+    width: 10px;
+    height: 10px;
+    border-color: rgba(115, 115, 115, 0.7);
+    background-color: rgba(115, 115, 115, 0.12);
+}
+
+.dark .cursor-ring.click {
+    border-color: rgba(200, 200, 200, 0.7);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 点击时，内点保持核心位置 */
+.cursor-dot.click {
+    width: 4px;
+    height: 4px;
+}
+
+/* 终端区域内保持文本选择的光标提示 */
+.terminal-area,
+input,
+textarea {
+    cursor: text !important;
+}
+
 /* 隐藏滚动条 */
 ::-webkit-scrollbar {
     display: none;
