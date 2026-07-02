@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
-import { flushSync } from 'react-dom'; // 同步 DOM 快照更新
+import { flushSync } from 'react-dom';
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom';
 import {
     Globe, LayoutGrid,
@@ -8,7 +8,31 @@ import {
     SkipForward, SkipBack, ListMusic
 } from 'lucide-react';
 
-// --- 配置区 ---
+// --- 全局数据接口定义 ---
+interface DayContribution {
+    level: number;
+    count: number;
+}
+
+interface GitHubActivity {
+    id: string;
+    action: string;
+    repo: string;
+    date: string;
+}
+
+interface LyricLine {
+    time: number;
+    text: string;
+}
+
+interface Task {
+    id: number;
+    text: string;
+    done: boolean;
+}
+
+// 全局配置常量定义
 const SEARCH_ENGINES = [
     { id: 'google', name: 'Google', url: 'https://www.google.com/search?q=' },
     { id: 'bing', name: 'Bing', url: 'https://www.bing.com/search?q=' },
@@ -22,6 +46,7 @@ const DOCK_PAGES = [
     { name: 'Tech Stack', icon: Cpu, id: 3, path: '/stack' }
 ];
 
+// 根据技术栈语言匹配高亮色彩
 const getLangColor = (lang: string) => {
     const colors: { [key: string]: string } = {
         TypeScript: 'bg-blue-500',
@@ -34,15 +59,15 @@ const getLangColor = (lang: string) => {
     return colors[lang] || 'bg-neutral-400';
 };
 
-// --- 太阳轨迹微件 ---
+// 太阳轨迹动态动效组件
 const TemporalArc = () => {
     const [coords, setCoords] = useState({ x: 14, y: 35, isDay: true });
 
     useEffect(() => {
         const now = new Date();
         const hours = now.getHours() + now.getMinutes() / 60;
-        const sunrise = 5.2;
-        const sunset = 18.8;
+        const sunrise = 5.2; // 预设日出时间
+        const sunset = 18.8;  // 预设日落时间
 
         if (hours >= sunrise && hours <= sunset) {
             const targetPct = (hours - sunrise) / (sunset - sunrise);
@@ -94,12 +119,7 @@ const TemporalArc = () => {
     );
 };
 
-// --- 复刻版 GitHub 贡献日历与友链 ---
-interface DayContribution {
-    level: number;
-    count: number;
-}
-
+// GitHub 贡献日历组件
 const PixelGrid = ({ gridData }: { gridData: DayContribution[] }) => {
     const totalContributions = gridData.reduce((sum, item) => sum + (item.count || 0), 0) || 134;
 
@@ -114,7 +134,7 @@ const PixelGrid = ({ gridData }: { gridData: DayContribution[] }) => {
         const currentMonth = date.getMonth();
 
         if (currentMonth !== lastMonth && i - lastMonthIndex >= 3 && i < 51) {
-            const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+            const monthName = date.toLocaleString('en-US', { month: 'short' });
             monthLabels.push({ index: i, label: monthName });
             lastMonth = currentMonth;
             lastMonthIndex = i;
@@ -251,14 +271,7 @@ const PixelGrid = ({ gridData }: { gridData: DayContribution[] }) => {
     );
 };
 
-// --- GitHub 动态卡片组件 ---
-interface GitHubActivity {
-    id: string;
-    action: string;
-    repo: string;
-    date: string;
-}
-
+// GitHub 近期动态组件
 const RecentActivityCard = ({ events }: { events: GitHubActivity[] }) => {
     return (
         <div className="flex flex-col p-6 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 w-full h-full select-none transition-all duration-700 min-h-65 justify-between">
@@ -301,7 +314,7 @@ const RecentActivityCard = ({ events }: { events: GitHubActivity[] }) => {
     );
 };
 
-// --- 番茄工作钟 / 深度聚焦计时器 ---
+// 番茄工作钟组件
 const Pomodoro = () => {
     const [minutes, setMinutes] = useState(25);
     const [seconds, setSeconds] = useState(0);
@@ -454,7 +467,7 @@ const Pomodoro = () => {
     );
 };
 
-// --- 每日焦点待办清单 ---
+// 每日待办事项组件
 const AgendaList = ({ tasks, toggleTask, deleteTask, addTask, newTaskText, setNewTaskText }: any) => {
     return (
         <div className="flex flex-col justify-between p-6 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 w-full min-h-44 select-none transition-colors duration-700">
@@ -501,26 +514,14 @@ const AgendaList = ({ tasks, toggleTask, deleteTask, addTask, newTaskText, setNe
     );
 };
 
-// --- 歌词及待办任务接口定义 ---
-interface LyricLine {
-    time: number;
-    text: string;
-}
-
-interface Task {
-    id: number;
-    text: string;
-    done: boolean;
-}
-
-// --- 工作空间内部核心逻辑 ---
+// 应用核心逻辑组件
 function AppContent() {
     const [time, setTime] = useState(new Date());
     const [query, setQuery] = useState('');
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const [isMounted, setIsMounted] = useState(false);
 
-    // 1. 持久化主题配置
+    // 初始化主题配置，从本地存储中恢复状态
     const [isDark, setIsDark] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('theme') !== 'light';
@@ -528,7 +529,7 @@ function AppContent() {
         return true;
     });
 
-    // 2. 持久化搜索引擎配置
+    // 从本地存储中读取搜索引擎设置
     const [engineIndex, setEngineIndex] = useState(() => {
         if (typeof window !== 'undefined') {
             const saved = localStorage.getItem('workspace_search_engine');
@@ -542,7 +543,7 @@ function AppContent() {
         return 0;
     });
 
-    // 3. 持久化12/24小时制配置
+    // 从本地存储中读取时间格式设置
     const [isTwelveHour, setIsTwelveHour] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('workspace_clock_12h') === 'true';
@@ -550,7 +551,7 @@ function AppContent() {
         return false;
     });
 
-    // 4. 持久化待办列表，并引入强类型约束
+    // 从本地存储中读取待办任务列表数据
     const [tasks, setTasks] = useState<Task[]>(() => {
         if (typeof window !== 'undefined') {
             const saved = localStorage.getItem('workspace_tasks');
@@ -573,7 +574,7 @@ function AppContent() {
 
     const [weather, setWeather] = useState({ temp: '-°C', city: '-', cond: '-' });
 
-    // 动态歌单及音乐播放器状态
+    // 音乐播放器和歌单相关状态
     const [playlist, setPlaylist] = useState<any[]>([]);
     const [playlistIndex, setPlaylistIndex] = useState(0);
     const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
@@ -581,7 +582,7 @@ function AppContent() {
     const [musicInfo, setMusicInfo] = useState({ name: 'Loading...', artist: 'Please wait', pic: '', url: '' });
     const [isMusicPlaying, setIsMusicPlaying] = useState(false);
 
-    // 歌词及原生 Document画中画 状态
+    // 歌词及浏览器原生画中画（PiP）状态
     const [lyrics, setLyrics] = useState<LyricLine[]>([]);
     const [audioCurrentTime, setAudioCurrentTime] = useState(0);
     const [currentLyricIndex, setCurrentLyricIndex] = useState(-1);
@@ -597,7 +598,7 @@ function AppContent() {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // 各种引用的 DOM refs
+    // DOM 元素引用句柄
     const lyricsContainerRef = useRef<HTMLDivElement>(null);
     const pipRootRef = useRef<HTMLDivElement | null>(null);
 
@@ -638,7 +639,7 @@ function AppContent() {
         isPlayingRef.current = isMusicPlaying;
     }, [isMusicPlaying]);
 
-    // 监听状态改变并同步到 localStorage
+    // 状态变化同步至本地存储
     useEffect(() => {
         localStorage.setItem('workspace_search_engine', String(engineIndex));
     }, [engineIndex]);
@@ -651,6 +652,7 @@ function AppContent() {
         localStorage.setItem('workspace_tasks', JSON.stringify(tasks));
     }, [tasks]);
 
+    // 初始化音频频谱分析器
     const initAnalyser = () => {
         if (!audioRef.current) return;
         audioRef.current.crossOrigin = "anonymous";
@@ -679,12 +681,13 @@ function AppContent() {
         }
     };
 
+    // 动效频谱实时渲染逻辑（重构为修改 transform scaleY 避开重排）
     const updateSpectrum = () => {
         if (!isPlayingRef.current) {
-            if (bar1Ref.current) bar1Ref.current.style.height = '2px';
-            if (bar2Ref.current) bar2Ref.current.style.height = '2px';
-            if (bar3Ref.current) bar3Ref.current.style.height = '2px';
-            if (bar4Ref.current) bar4Ref.current.style.height = '2px';
+            if (bar1Ref.current) bar1Ref.current.style.transform = 'scaleY(0.1)';
+            if (bar2Ref.current) bar2Ref.current.style.transform = 'scaleY(0.1)';
+            if (bar3Ref.current) bar3Ref.current.style.transform = 'scaleY(0.1)';
+            if (bar4Ref.current) bar4Ref.current.style.transform = 'scaleY(0.1)';
             return;
         }
 
@@ -721,10 +724,11 @@ function AppContent() {
             h4 = Math.max(2, (Math.sin(t * 1.7 + 3) * 0.4 + 0.6) * 12 + Math.random() * 2);
         }
 
-        if (bar1Ref.current) bar1Ref.current.style.height = `${h1}px`;
-        if (bar2Ref.current) bar2Ref.current.style.height = `${h2}px`;
-        if (bar3Ref.current) bar3Ref.current.style.height = `${h3}px`;
-        if (bar4Ref.current) bar4Ref.current.style.height = `${h4}px`;
+        // 仅通过合成器控制縮放，性能损耗接近于零
+        if (bar1Ref.current) bar1Ref.current.style.transform = `scaleY(${h1 / 24})`;
+        if (bar2Ref.current) bar2Ref.current.style.transform = `scaleY(${h2 / 24})`;
+        if (bar3Ref.current) bar3Ref.current.style.transform = `scaleY(${h3 / 24})`;
+        if (bar4Ref.current) bar4Ref.current.style.transform = `scaleY(${h4 / 24})`;
 
         animationFrameRef.current = requestAnimationFrame(updateSpectrum);
     };
@@ -745,6 +749,7 @@ function AppContent() {
         setDockMouseX(e.clientX - rect.left);
     };
 
+    // 底部浮动坞图标大小自适应缩放样式
     const getDynamicScaleStyle = (index: number) => {
         if (dockMouseX === null) return {};
         const itemCenter = (index + 0.5) * (dockWidth / DOCK_PAGES.length);
@@ -765,6 +770,7 @@ function AppContent() {
         setQuery('');
     };
 
+    // 切换卡片容器过渡动画类分配
     const getPageClass = (pageId: number) => {
         const isActive = currentPage === pageId;
         const baseClass = "grid gap-6 will-change-[opacity,transform]";
@@ -791,6 +797,7 @@ function AppContent() {
         }
     };
 
+    // 优雅的主题转场平滑动画触发逻辑
     const toggleTheme = (e: React.MouseEvent<HTMLButtonElement>) => {
         if (isTransitioningRef.current) return;
 
@@ -868,6 +875,7 @@ function AppContent() {
         }
     }, [isDark]);
 
+    // 初始化天气获取
     useEffect(() => {
         fetch('https://api.xiaofengqwq.com/api/v1/tools/weather?type=now')
             .then(r => r.json())
@@ -883,7 +891,7 @@ function AppContent() {
             .catch(err => console.error(err));
     }, []);
 
-    // 正则解析 LRC 歌词格式
+    // 解析标准 LRC 歌词格式
     const parseLRC = (lrcText: string): LyricLine[] => {
         const lines = lrcText.split('\n');
         const parsed: LyricLine[] = [];
@@ -904,14 +912,13 @@ function AppContent() {
         return parsed.sort((a, b) => a.time - b.time);
     };
 
-    // 1. 初始化拉取外部动态歌单数据 (ID 变更为 6634356386)
+    // 初始化获取网易云歌单列表
     useEffect(() => {
         fetch('https://api.xiaofengqwq.com/api/v1/music/playlist?server=netease&id=6634356386')
             .then(r => r.json())
             .then(res => {
                 if (res.code === 200 && Array.isArray(res.data) && res.data.length > 0) {
                     setPlaylist(res.data);
-                    // 默认显示第一首歌曲
                     const firstSong = res.data[0];
                     setMusicInfo({
                         name: firstSong.name || 'Unknown',
@@ -923,7 +930,6 @@ function AppContent() {
             })
             .catch(err => {
                 console.error("Failed to fetch playlist", err);
-                // 异常回退预设
                 const fallback = [
                     {
                         name: 'Solar Echoes',
@@ -938,7 +944,7 @@ function AppContent() {
             });
     }, []);
 
-    // 2. 当歌单索引发生变化时，更新歌曲元数据并异步获取解析歌词
+    // 切换歌曲时更新当前播放信息及获取对应歌词
     useEffect(() => {
         if (playlist.length > 0 && playlist[playlistIndex]) {
             const currentSong = playlist[playlistIndex];
@@ -949,7 +955,6 @@ function AppContent() {
                 url: currentSong.url || ''
             });
 
-            // 获取并解析歌词
             if (currentSong.lrc) {
                 fetch(currentSong.lrc)
                     .then(r => r.text())
@@ -966,7 +971,7 @@ function AppContent() {
         }
     }, [playlistIndex, playlist]);
 
-    // 3. 歌曲链接切换后重新挂载音频，注册事件监听器
+    // 音频播放器实例管理与状态监听
     useEffect(() => {
         if (musicInfo.url) {
             if (audioRef.current) {
@@ -1012,17 +1017,15 @@ function AppContent() {
         }
     }, [isMusicPlaying]);
 
-    // 监听播放状态同步更新 Media Session 的播放状态
     useEffect(() => {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = isMusicPlaying ? 'playing' : 'paused';
         }
     }, [isMusicPlaying]);
 
-    // Media Session 媒体元数据同步与系统/物理按钮事件注册
+    // 同步系统媒体中心元数据并注册全局控制事件
     useEffect(() => {
         if ('mediaSession' in navigator && playlist.length > 0) {
-            // 同步当前播放元数据
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: musicInfo.name,
                 artist: musicInfo.artist,
@@ -1032,7 +1035,6 @@ function AppContent() {
                 ] : []
             });
 
-            // 注册控制动作监听
             navigator.mediaSession.setActionHandler('play', () => {
                 setIsMusicPlaying(true);
             });
@@ -1059,10 +1061,10 @@ function AppContent() {
                 cancelAnimationFrame(animationFrameRef.current);
                 animationFrameRef.current = null;
             }
-            if (bar1Ref.current) bar1Ref.current.style.height = '2px';
-            if (bar2Ref.current) bar2Ref.current.style.height = '2px';
-            if (bar3Ref.current) bar3Ref.current.style.height = '2px';
-            if (bar4Ref.current) bar4Ref.current.style.height = '2px';
+            if (bar1Ref.current) bar1Ref.current.style.transform = 'scaleY(0.1)';
+            if (bar2Ref.current) bar2Ref.current.style.transform = 'scaleY(0.1)';
+            if (bar3Ref.current) bar3Ref.current.style.transform = 'scaleY(0.1)';
+            if (bar4Ref.current) bar4Ref.current.style.transform = 'scaleY(0.1)';
         }
 
         return () => {
@@ -1072,7 +1074,7 @@ function AppContent() {
         };
     }, [isMusicPlaying]);
 
-    // 定位当前的歌词索引
+    // 计算当前高亮的歌词行索引
     useEffect(() => {
         if (lyrics.length === 0) {
             setCurrentLyricIndex(-1);
@@ -1089,7 +1091,7 @@ function AppContent() {
         setCurrentLyricIndex(activeIdx);
     }, [audioCurrentTime, lyrics]);
 
-    // 默认内嵌面板歌词平滑滚动逻辑
+    // 歌词平滑滚动逻辑
     useEffect(() => {
         if (currentLyricIndex !== -1 && lyricsContainerRef.current) {
             const activeEl = lyricsContainerRef.current.querySelector(`[data-index="${currentLyricIndex}"]`);
@@ -1102,22 +1104,19 @@ function AppContent() {
         }
     }, [currentLyricIndex]);
 
-    // 新的“文档画中画（Document PiP）”DOM 歌词同步渲染渲染逻辑 (HTML 输出极其清晰)
+    // 在文档画中画窗口中高保真同步渲染双语歌词
     useEffect(() => {
         if (!isPiPActive || !pipRootRef.current) return;
 
         const root = pipRootRef.current;
-        // 动态同步主题色样式
         root.className = `w-full h-full flex flex-col justify-center items-center overflow-hidden p-3 select-none text-center ${isDark ? 'bg-[#060606] text-white' : 'bg-[#fafafa] text-neutral-900'
             }`;
 
         const currentLine = lyrics[currentLyricIndex]?.text || ' ';
-
         const parts = currentLine.split(/[（(]/);
         const originText = parts[0]?.trim() || '';
         const transText = parts[1]?.replace(/[)）]/g, '')?.trim() || '';
 
-        // 直接写入清晰的矢量 HTML 元素
         if (transText) {
             root.innerHTML = `
                 <p style="font-family: sans-serif; font-weight: bold; font-size: 13px; letter-spacing: 0.05em; margin: 0; padding: 0 10px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 100%; line-height: 1.3;">${originText}</p>
@@ -1130,7 +1129,7 @@ function AppContent() {
         }
     }, [currentLyricIndex, lyrics, isDark, isPiPActive]);
 
-    // 新的“文档画中画（Document PiP）”切换核心控制
+    // 开启或关闭文档画中画歌词悬浮窗
     const togglePiP = async (e: React.MouseEvent) => {
         e.stopPropagation();
         const pip = (window as any).documentPictureInPicture;
@@ -1139,7 +1138,6 @@ function AppContent() {
             return;
         }
 
-        // 如果已经开启，点击则关闭
         if (pip.window) {
             pip.window.close();
             setIsPiPActive(false);
@@ -1148,13 +1146,11 @@ function AppContent() {
         }
 
         try {
-            // 通过 API 精确限制新打开窗口的大小，直接完美解决“窗口过大”问题
             const pipWindow = await pip.requestWindow({
                 width: 320,
                 height: 75
             });
 
-            // 将主窗体样式拷贝入画中画子窗体以保证渲染字体表现
             const allStyles = Array.from(document.styleSheets);
             allStyles.forEach((styleSheet) => {
                 try {
@@ -1174,7 +1170,6 @@ function AppContent() {
                 }
             });
 
-            // 去除画中画窗口的 body 边距，实现无边框悬浮体验
             pipWindow.document.body.style.margin = '0';
             pipWindow.document.body.style.padding = '0';
             pipWindow.document.body.style.overflow = 'hidden';
@@ -1187,7 +1182,6 @@ function AppContent() {
             pipRootRef.current = pipDiv;
             setIsPiPActive(true);
 
-            // 首次内容加载
             const currentLine = lyrics[currentLyricIndex]?.text || ' ';
             const parts = currentLine.split(/[（(]/);
             const originText = parts[0]?.trim() || '';
@@ -1203,7 +1197,6 @@ function AppContent() {
                 `;
             }
 
-            // 监听窗口外部关闭事件
             pipWindow.addEventListener('pagehide', () => {
                 setIsPiPActive(false);
                 pipRootRef.current = null;
@@ -1213,6 +1206,7 @@ function AppContent() {
         }
     };
 
+    // 获取并解析 GitHub 仓库与活跃数据
     useEffect(() => {
         fetch('https://api.github.com/users/XiaoFeng-QWQ')
             .then(r => r.json())
@@ -1243,7 +1237,6 @@ function AppContent() {
             })
             .catch(err => console.error(err));
 
-        // 获取近期 GitHub 动态
         fetch('https://api.github.com/users/XiaoFeng-QWQ/events?per_page=10')
             .then(r => r.json())
             .then(data => {
@@ -1318,6 +1311,7 @@ function AppContent() {
             });
     }, []);
 
+    // 快捷键监听
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -1334,12 +1328,12 @@ function AppContent() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
+    // 时间刷新时钟
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // 强类型约束保护迭代
     const toggleTask = (id: number) => {
         setTasks(tasks.map((t: Task) => t.id === id ? { ...t, done: !t.done } : t));
     };
@@ -1356,7 +1350,6 @@ function AppContent() {
         setTasks(tasks.filter((t: Task) => t.id !== id));
     };
 
-    // 切歌控制（带有效性边界检查）
     const handleNextTrack = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (playlist.length === 0) return;
@@ -1374,7 +1367,7 @@ function AppContent() {
     return (
         <div
             onMouseMove={handleMouseMove}
-            className="min-h-screen w-full relative flex flex-col items-center justify-between py-12 px-6 lg:px-12 overflow-hidden bg-[#fafafa] dark:bg-[#060606] text-neutral-900 dark:text-white transition-colors duration-1000 selection:bg-neutral-200 dark:selection:bg-neutral-800"
+            className="min-h-screen w-full relative flex flex-col items-center justify-between pt-12 pb-28 px-6 lg:px-12 overflow-hidden bg-[#fafafa] dark:bg-[#060606] text-neutral-900 dark:text-white transition-colors duration-1000 selection:bg-neutral-200 dark:selection:bg-neutral-800"
         >
             <div className={`absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-size-[40px_40px] mask-[radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none transition-opacity duration-1500 ${isMounted ? 'opacity-100' : 'opacity-0'
                 }`} />
@@ -1414,7 +1407,7 @@ function AppContent() {
 
             <div className="relative w-full max-w-6xl my-auto py-12 min-h-120">
 
-                {/* 页面 0: Identity */}
+                {/* 第一页：个人主页 (Identity) */}
                 <div className={`${getPageClass(0)} grid-cols-1 md:grid-cols-3 gap-6`}>
                     <div className={`col-span-1 md:col-span-2 flex flex-col justify-between p-8 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 w-full min-h-75 select-none transition-[opacity,transform] duration-700 ease-out delay-75 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                         }`}>
@@ -1460,6 +1453,17 @@ function AppContent() {
                                 <Compass size={12} />
                                 <span>QZone</span>
                             </a>
+                            <a
+                                href="https://www.travellings.cn/go.html"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-24 h-8 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100/30 dark:bg-neutral-900/30 hover:border-neutral-400 dark:hover:border-neutral-600 transition-all bg-no-repeat bg-center"
+                                style={{
+                                    backgroundImage: `url(${isDark ? 'https://www.travellings.cn/assets/b.png' : 'https://www.travellings.cn/assets/w.png'})`,
+                                    backgroundSize: '80% auto'
+                                }}
+                                title="开往 - 友情链接"
+                            />
                         </div>
                     </div>
 
@@ -1479,7 +1483,7 @@ function AppContent() {
                     </div>
                 </div>
 
-                {/* 页面 1: Workspace */}
+                {/* 第二页：工作空间 (Workspace) */}
                 <div className={`${getPageClass(1)} grid-cols-1 lg:grid-cols-12 gap-8`}>
 
                     <div className={`lg:col-span-12 w-full flex justify-center transition-[opacity,transform] duration-700 ease-out delay-50 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
@@ -1517,7 +1521,7 @@ function AppContent() {
                         </form>
                     </div>
 
-                    {/* 左一栏：核心控制中心 */}
+                    {/* 左一栏：核心时间与备忘待办 */}
                     <section className={`lg:col-span-5 flex flex-col justify-center items-center lg:items-start select-none transition-[opacity,transform] duration-700 ease-out delay-100 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                         }`}>
                         <span className="text-xs tracking-[0.3em] font-medium text-neutral-400 uppercase mb-4">
@@ -1555,7 +1559,7 @@ function AppContent() {
                         }`}>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* 天气 */}
+                            {/* 天气小组件 */}
                             <div className="flex flex-col justify-between p-6 rounded-3xl bg-white/40 dark:bg-neutral-900/30 border border-neutral-200/50 dark:border-neutral-800/50 hover:border-neutral-300 dark:hover:border-neutral-700/50 transition-colors duration-700 select-none h-32">
                                 <div className="flex justify-between items-start text-neutral-500 dark:text-neutral-400">
                                     <Globe size={20} />
@@ -1608,7 +1612,6 @@ function AppContent() {
                                         <span className="text-xs text-neutral-500 dark:text-neutral-500 truncate transition-colors duration-700">{musicInfo.artist}</span>
                                     </div>
                                     <div className="flex flex-col items-end gap-1.5 shrink-0 ml-2">
-                                        {/* 切歌及原生画中画控制按钮 */}
                                         <div className="flex items-center gap-1.5">
                                             <button
                                                 onClick={handlePrevTrack}
@@ -1624,12 +1627,11 @@ function AppContent() {
                                             >
                                                 <SkipForward size={13} />
                                             </button>
-                                            {/* 原生浏览器画中画启动按钮 */}
                                             <button
                                                 onClick={togglePiP}
                                                 className={`p-1 rounded-md transition-colors ${isPiPActive
-                                                        ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
-                                                        : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                                                    ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
+                                                    : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
                                                     }`}
                                                 title="开启桌面原生画中画歌词"
                                             >
@@ -1638,28 +1640,26 @@ function AppContent() {
                                             <button
                                                 onClick={() => setIsPlaylistOpen(!isPlaylistOpen)}
                                                 className={`p-1 rounded-md transition-colors ${isPlaylistOpen
-                                                        ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
-                                                        : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                                                    ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
+                                                    : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
                                                     }`}
                                                 title="歌单与歌词"
                                             >
                                                 <ListMusic size={13} />
                                             </button>
                                         </div>
-                                        {/* 动画频谱 */}
-                                        <div className="flex items-end gap-1 h-4 opacity-50 pr-1 mt-1">
-                                            <div ref={bar1Ref} className="w-0.75 bg-neutral-400 dark:bg-neutral-500 transition-[height] duration-100 ease-out" style={{ height: '2px' }} />
-                                            <div ref={bar2Ref} className="w-0.75 bg-neutral-400 dark:bg-neutral-500 transition-[height] duration-100 ease-out" style={{ height: '2px' }} />
-                                            <div ref={bar3Ref} className="w-0.75 bg-neutral-400 dark:bg-neutral-500 transition-[height] duration-100 ease-out" style={{ height: '2px' }} />
-                                            <div ref={bar4Ref} className="w-0.75 bg-neutral-400 dark:bg-neutral-500 transition-[height] duration-100 ease-out" style={{ height: '2px' }} />
+                                        {/* 音频频谱 */}
+                                        <div className="flex items-end gap-1 h-6 opacity-50 pr-1 mt-1">
+                                            <div ref={bar1Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                            <div ref={bar2Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                            <div ref={bar3Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                            <div ref={bar4Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* 展开区域 */}
                                 {isPlaylistOpen && (
                                     <div className="flex-1 mt-4 border-t border-neutral-200/50 dark:border-neutral-800/50 pt-3 flex flex-col min-h-0">
-                                        {/* 标签控制栏 */}
                                         <div className="flex gap-4 items-center border-b border-neutral-200/10 pb-1.5 shrink-0">
                                             <div className="flex gap-4 text-[10px] uppercase tracking-wider font-semibold text-neutral-400 dark:text-neutral-500">
                                                 <button
@@ -1677,7 +1677,6 @@ function AppContent() {
                                             </div>
                                         </div>
 
-                                        {/* 区域内容 */}
                                         <div className="flex-1 overflow-y-auto scrollbar-none min-h-0 pt-2">
                                             {expandedTab === 'playlist' ? (
                                                 <div className="space-y-1.5">
@@ -1691,8 +1690,8 @@ function AppContent() {
                                                                 }
                                                             }}
                                                             className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer text-xs transition-all ${idx === playlistIndex
-                                                                    ? 'bg-neutral-200/55 dark:bg-neutral-900 text-neutral-900 dark:text-white font-medium'
-                                                                    : 'hover:bg-neutral-100/50 dark:hover:bg-neutral-900/30 text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+                                                                ? 'bg-neutral-200/55 dark:bg-neutral-900 text-neutral-900 dark:text-white font-medium'
+                                                                : 'hover:bg-neutral-100/50 dark:hover:bg-neutral-900/30 text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
                                                                 }`}
                                                         >
                                                             <div className="flex items-center gap-2 truncate">
@@ -1706,7 +1705,6 @@ function AppContent() {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                // 内嵌歌词面板
                                                 <div
                                                     ref={lyricsContainerRef}
                                                     className="h-full overflow-y-auto scrollbar-none space-y-3.5 text-center py-10"
@@ -1719,8 +1717,8 @@ function AppContent() {
                                                                     key={idx}
                                                                     data-index={idx}
                                                                     className={`text-[11px] transition-all duration-300 px-4 leading-relaxed ${isActive
-                                                                            ? 'text-neutral-900 dark:text-white font-semibold scale-105'
-                                                                            : 'text-neutral-400/50 dark:text-neutral-600/50 hover:text-neutral-600 dark:hover:text-neutral-400'
+                                                                        ? 'text-neutral-900 dark:text-white font-semibold scale-105'
+                                                                        : 'text-neutral-400/50 dark:text-neutral-600/50 hover:text-neutral-600 dark:hover:text-neutral-400'
                                                                         }`}
                                                                 >
                                                                     {lyric.text}
@@ -1747,7 +1745,7 @@ function AppContent() {
                     </section>
                 </div>
 
-                {/* 页面 2: Projects */}
+                {/* 第三页：项目履历 (Projects) */}
                 <div className={`${getPageClass(2)} grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`}>
                     <div className="col-span-1 md:col-span-2 lg:col-span-2">
                         <PixelGrid gridData={activityGrid} />
@@ -1788,7 +1786,7 @@ function AppContent() {
                     )}
                 </div>
 
-                {/* 页面 3: Tech Stack */}
+                {/* 第四页：技术栈架构 (Tech Stack) */}
                 <div className={`${getPageClass(3)} grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4`}>
                     {['React / Next.js', 'TypeScript', 'Tailwind v4', 'Vite', 'Node.js', 'Git Engine', 'MySQL', 'PHP'].map((tech, idx) => (
                         <div
@@ -1809,15 +1807,15 @@ function AppContent() {
 
             </div>
 
-            {/* 底部悬浮行动坞 */}
-            <footer className={`relative z-10 select-none transition-all duration-1200 ease-[cubic-bezier(0.16,1,0.3,1)] delay-500 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            {/* 底部悬浮固定行动坞 */}
+            <footer className={`fixed bottom-8 inset-x-0 flex justify-center z-30 select-none pointer-events-none transition-all duration-1200 ease-[cubic-bezier(0.16,1,0.3,1)] delay-500 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
                 }`}>
                 <div
                     ref={dockRef}
                     onMouseEnter={handleDockMouseEnter}
                     onMouseMove={handleDockMouseMove}
                     onMouseLeave={() => setDockMouseX(null)}
-                    className="flex items-end gap-3 px-4 py-2.5 rounded-3xl bg-white/30 dark:bg-neutral-900/20 backdrop-blur-2xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-2xl transition-all duration-700 hover:py-3"
+                    className="pointer-events-auto flex items-end gap-3 px-4 py-2.5 rounded-3xl bg-white/30 dark:bg-neutral-900/20 backdrop-blur-2xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-2xl transition-all duration-700 hover:py-3"
                 >
                     {DOCK_PAGES.map((item, i) => {
                         const isActive = currentPage === item.id;
