@@ -1,10 +1,26 @@
-import { useState, useEffect } from 'react';
-import type { GithubProfile, GithubProject, DayContribution, GitHubActivity } from '../types';
+import { useState, useEffect, useCallback } from 'react';
+import type { GithubProfile, GithubProject, DayContribution, GitHubActivity, LoadState } from '../types';
 import { getLangColor } from '../constants';
+
+/** 各项 GitHub 数据的加载状态 */
+export interface GithubStatus {
+    profile: LoadState;
+    projects: LoadState;
+    activity: LoadState;
+    events: LoadState;
+}
+
+const INITIAL_STATUS: GithubStatus = {
+    profile: 'loading',
+    projects: 'loading',
+    activity: 'loading',
+    events: 'loading'
+};
 
 /**
  * GitHub 数据获取 Hook
- * 获取用户资料、项目列表、贡献日历和活动记录
+ * 获取用户资料、项目列表、贡献日历和活动记录。
+ * 每项数据都带独立加载状态与来源标记，失败不再只留空白。
  */
 export const useGithub = () => {
     const [githubProfile, setGithubProfile] = useState<GithubProfile>({
@@ -17,12 +33,21 @@ export const useGithub = () => {
     const [githubProjects, setGithubProjects] = useState<GithubProject[]>([]);
     const [activityGrid, setActivityGrid] = useState<DayContribution[]>([]);
     const [recentEvents, setRecentEvents] = useState<GitHubActivity[]>([]);
+    const [status, setStatus] = useState<GithubStatus>(INITIAL_STATUS);
+    /** 贡献图在接口失败时会用模拟数据兜底，界面上需要如实标注 */
+    const [activitySource, setActivitySource] = useState<'live' | 'sample'>('live');
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
+        let cancelled = false;
+        const mark = (key: keyof GithubStatus, value: LoadState) =>
+            setStatus(prev => ({ ...prev, [key]: value }));
+
         // 获取用户资料
         fetch('https://api.github.com/users/XiaoFeng-QWQ')
             .then(r => r.json())
             .then(data => {
+                if (cancelled) return;
                 if (data && data.login) {
                     setGithubProfile({
                         avatar: data.avatar_url,
@@ -30,31 +55,44 @@ export const useGithub = () => {
                         publicRepos: data.public_repos || 0,
                         location: 'Hebei, ShiJiaZhang, China'
                     });
+                    mark('profile', 'ready');
+                } else {
+                    mark('profile', 'error');
                 }
             })
-            .catch(err => console.error(err));
+            .catch(err => {
+                console.error(err);
+                if (!cancelled) mark('profile', 'error');
+            });
 
         // 获取项目列表
         fetch('https://api.github.com/users/XiaoFeng-QWQ/repos?sort=updated&per_page=6')
             .then(r => r.json())
             .then(data => {
+                if (cancelled) return;
                 if (Array.isArray(data)) {
-                    const mapped = data.slice(0, 3).map(repo => ({
+                    setGithubProjects(data.slice(0, 3).map(repo => ({
                         name: repo.name,
                         desc: repo.description || 'No description provided.',
                         lang: repo.language || 'TypeScript',
                         url: repo.html_url,
                         color: getLangColor(repo.language || 'TypeScript')
-                    }));
-                    setGithubProjects(mapped);
+                    })));
+                    mark('projects', 'ready');
+                } else {
+                    mark('projects', 'error');
                 }
             })
-            .catch(err => console.error(err));
+            .catch(err => {
+                console.error(err);
+                if (!cancelled) mark('projects', 'error');
+            });
 
         // 获取活动记录
         fetch('https://api.github.com/users/XiaoFeng-QWQ/events?per_page=10')
             .then(r => r.json())
             .then(data => {
+                if (cancelled) return;
                 if (Array.isArray(data)) {
                     const parsed = data.slice(0, 4).map((event: any) => {
                         let action = '';
@@ -86,14 +124,21 @@ export const useGithub = () => {
                         };
                     });
                     setRecentEvents(parsed);
+                    mark('events', 'ready');
+                } else {
+                    mark('events', 'error');
                 }
             })
-            .catch(err => console.error("Failed to fetch events:", err));
+            .catch(err => {
+                console.error("Failed to fetch events:", err);
+                if (!cancelled) mark('events', 'error');
+            });
 
         // 获取贡献日历
         fetch('https://github-contributions-api.jogruber.de/v4/XiaoFeng-QWQ?y=last')
             .then(r => r.json())
             .then(res => {
+                if (cancelled) return;
                 if (res && Array.isArray(res.contributions)) {
                     const rawContributions = res.contributions;
                     const targetLength = 371;
@@ -106,12 +151,15 @@ export const useGithub = () => {
                         };
                     });
                     setActivityGrid(mappedGrid);
+                    setActivitySource('live');
+                    mark('activity', 'ready');
                 } else {
                     throw new Error("Invalid format");
                 }
             })
             .catch(() => {
-                // 生成模拟数据
+                if (cancelled) return;
+                // 生成模拟数据兜底（界面上会标注为 sample）
                 const fallbackGrid = Array.from({ length: 371 }).map((_, i) => {
                     const dayOfWeek = i % 7;
                     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -125,13 +173,28 @@ export const useGithub = () => {
                     return { level: 0, count: 0 };
                 });
                 setActivityGrid(fallbackGrid);
+                setActivitySource('sample');
+                mark('activity', 'error');
             });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [reloadKey]);
+
+    /** 重新拉取全部 GitHub 数据 */
+    const reloadGithub = useCallback(() => {
+        setStatus(INITIAL_STATUS);
+        setReloadKey(key => key + 1);
     }, []);
 
     return {
         githubProfile,
         githubProjects,
         activityGrid,
-        recentEvents
+        recentEvents,
+        status,
+        activitySource,
+        reloadGithub
     };
 };

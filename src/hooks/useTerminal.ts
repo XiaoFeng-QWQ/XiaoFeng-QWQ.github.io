@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, type FormEvent, type KeyboardEvent } from 'react';
 import type { TerminalLine, FSDir, PromptState, PagerState } from '../types';
 import { navigateTo } from '../utils/vfs';
-import { formatCommandNotFoundError, formatPSError } from '../utils/terminalHelpers';
+import { formatCommandNotFoundError, formatPSError, buildNeofetchLines, buildSudoLines, buildMatrixFinaleLines, createRainColumns, advanceRainFrame } from '../utils/terminalHelpers';
 
 /**
  * 命令执行上下文接口
@@ -13,6 +13,8 @@ interface CommandContext {
     currentPath: string[];
     rootDir: FSDir;
     timestamp: string;
+    /** 终端可视列数（实测），供需要排版对齐的彩蛋命令使用 */
+    columns: number;
     setCurrentPath: (path: string[]) => void;
     setPromptState: (state: PromptState | null) => void;
     getVariableValue: (name: string) => string;
@@ -264,6 +266,23 @@ const commandRegistry: Record<string, CommandHandler> = {
             { type: 'output', text: 'CurrentCulture   : zh-CN', id: `${ctx.timestamp}-host-5` },
             { type: 'output', text: 'CurrentUICulture : zh-CN', id: `${ctx.timestamp}-host-6` }
         ]
+    },
+
+    // ── 彩蛋 ──────────────────────────────────────────────
+    'Get-ComputerInfo': {
+        aliases: ['neofetch', 'fetch', 'sysinfo'],
+        execute: (ctx) => buildNeofetchLines(ctx.timestamp, ctx.columns)
+    },
+
+    'Invoke-Sudo': {
+        aliases: ['sudo'],
+        execute: (ctx) => buildSudoLines(ctx.resolvedTarget || ctx.target, ctx.timestamp)
+    },
+
+    'Start-MatrixRain': {
+        aliases: ['matrix'],
+        // 逐帧动画无法在一次 execute 里产出，改由 handleTerminalSubmit 特判调度（与 Get-Help 分页同理）
+        execute: () => []
     }
 };
 
@@ -347,6 +366,76 @@ export const useTerminal = (rootDir: FSDir) => {
     useEffect(() => {
         terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [terminalHistory]);
+
+    /* ── 彩蛋：终端字符雨（matrix）─────────────────────────────
+       每帧「删掉上一帧 + 追加新帧」原地替换，而不是一路往下追加，
+       否则终端的自动滚动会把雨直接滚出视野。 */
+
+    const RAIN_ROWS = 6;
+    const RAIN_FRAME_MS = 100;
+    const RAIN_TOTAL_FRAMES = 26;
+
+    const rainRef = useRef<{ timer: ReturnType<typeof setInterval>; id: string; frame: number } | null>(null);
+
+    /**
+     * 实测终端可视列数：按 11px 等宽字体约 7.2px/字符保守估算，
+     * 宁可少几列，也不要折行把等宽对齐破坏掉
+     */
+    const getTerminalColumns = useCallback((): number => {
+        const body = terminalBottomRef.current?.parentElement;
+        return Math.max(16, Math.min(72, Math.floor((body?.clientWidth ?? 560) / 7.2)));
+    }, []);
+
+    /**
+     * 收掉字符雨：清定时器并移除它留下的所有行
+     * @param withFinale 是否补上收尾台词
+     */
+    const stopRain = useCallback((withFinale = false) => {
+        const rain = rainRef.current;
+        if (!rain) return;
+        clearInterval(rain.timer);
+        rainRef.current = null;
+        setTerminalHistory(prev => [
+            ...prev.filter(line => !line.id.startsWith(rain.id)),
+            ...(withFinale ? buildMatrixFinaleLines(`${rain.id}-end`) : [])
+        ]);
+    }, []);
+
+    /**
+     * 开始字符雨
+     */
+    const startRain = useCallback(() => {
+        stopRain();
+
+        // 以终端实际宽度决定列数
+        const columnCount = getTerminalColumns();
+        const id = `rain-${Date.now().toString(36)}`;
+        const columns = createRainColumns(columnCount);
+
+        const tick = () => {
+            const rain = rainRef.current;
+            if (!rain || rain.id !== id) return;
+            if (rain.frame >= RAIN_TOTAL_FRAMES) {
+                stopRain(true);
+                return;
+            }
+            const frameLines: TerminalLine[] = advanceRainFrame(columns, RAIN_ROWS).map((text, row) => ({
+                type: 'output',
+                text,
+                id: `${id}-f${rain.frame}-r${row}`
+            }));
+            setTerminalHistory(prev => [...prev.filter(line => !line.id.startsWith(id)), ...frameLines]);
+            rain.frame += 1;
+        };
+
+        rainRef.current = { timer: setInterval(tick, RAIN_FRAME_MS), id, frame: 0 };
+        tick();
+    }, [stopRain, getTerminalColumns]);
+
+    // 卸载时只清定时器，不做 setState
+    useEffect(() => () => {
+        if (rainRef.current) clearInterval(rainRef.current.timer);
+    }, []);
 
     /**
      * 获取当前目录下的文件和目录名
@@ -546,6 +635,9 @@ export const useTerminal = (rootDir: FSDir) => {
 
         if (handlePromptState(fullCmd, timestamp)) return;
 
+        // 任何一次输入都视为接管终端：先把正在播放的字符雨收掉
+        stopRain();
+
         if (fullCmd && (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== fullCmd)) {
             setCommandHistory(prev => [...prev, fullCmd]);
         }
@@ -581,6 +673,7 @@ export const useTerminal = (rootDir: FSDir) => {
             currentPath,
             rootDir,
             timestamp,
+            columns: getTerminalColumns(),
             setCurrentPath,
             setPromptState,
             getVariableValue
@@ -639,6 +732,15 @@ export const useTerminal = (rootDir: FSDir) => {
             return;
         }
 
+        // 字符雨：只回显输入行，动画由 startRain 逐帧推进
+        if (resolvedCmd === 'Start-MatrixRain') {
+            newLines.push({ type: 'system', text: ' ', id: `${timestamp}-mx-space` });
+            setTerminalHistory(prev => [...prev, ...newLines]);
+            setTerminalInput('');
+            startRain();
+            return;
+        }
+
         if (resolvedCmd === 'Get-History') {
             const historyLines: TerminalLine[] = commandHistory.slice(-10).map((cmd, idx) => ({
                 type: 'output' as const,
@@ -652,7 +754,7 @@ export const useTerminal = (rootDir: FSDir) => {
 
         setTerminalHistory(prev => [...prev, ...newLines]);
         setTerminalInput('');
-    }, [terminalInput, currentPath, rootDir, commandHistory, handlePromptState, getVariableValue]);
+    }, [terminalInput, currentPath, rootDir, commandHistory, handlePromptState, getVariableValue, stopRain, startRain, getTerminalColumns]);
 
     return {
         currentPath,

@@ -293,14 +293,18 @@ export const useMusicPlayer = (_currentPage: number) => {
         setCurrentLyricIndex(activeIdx);
     }, [audioCurrentTime, lyrics]);
 
-    // 歌词平滑滚动
+    // 歌词平滑滚动（只在歌词容器内滚动，避免 scrollIntoView 顺带滚动整页）
     useEffect(() => {
-        if (currentLyricIndex !== -1 && lyricsContainerRef.current) {
-            const activeEl = lyricsContainerRef.current.querySelector(`[data-index="${currentLyricIndex}"]`);
+        const container = lyricsContainerRef.current;
+        if (currentLyricIndex !== -1 && container) {
+            const activeEl = container.querySelector<HTMLElement>(`[data-index="${currentLyricIndex}"]`);
             if (activeEl) {
-                activeEl.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center'
+                const containerRect = container.getBoundingClientRect();
+                const activeRect = activeEl.getBoundingClientRect();
+                const offset = (activeRect.top - containerRect.top) - (container.clientHeight - activeRect.height) / 2;
+                container.scrollTo({
+                    top: Math.max(0, container.scrollTop + offset),
+                    behavior: 'smooth'
                 });
             }
         }

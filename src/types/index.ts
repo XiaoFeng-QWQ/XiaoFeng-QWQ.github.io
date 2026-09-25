@@ -34,6 +34,12 @@ export interface Task {
 }
 
 /**
+ * 异步资源加载状态
+ * 用于把「加载中 / 成功 / 失败」三态显式带到界面上
+ */
+export type LoadState = 'loading' | 'ready' | 'error';
+
+/**
  * 终端行接口
  */
 export interface TerminalLine {

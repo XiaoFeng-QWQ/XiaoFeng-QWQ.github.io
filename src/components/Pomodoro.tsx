@@ -88,27 +88,27 @@ const Pomodoro = () => {
     const progress = ((totalDurationSeconds - currentRemainingSeconds) / totalDurationSeconds) * 100;
 
     return (
-        <div className="flex flex-col justify-between p-6 rounded-3xl bg-neutral-950/5 dark:bg-neutral-950/40 border border-neutral-200/30 dark:border-neutral-800/20 hover:border-neutral-300 dark:hover:border-neutral-700 w-full h-44 select-none relative overflow-hidden transition-all duration-700">
+        <div data-variant="recessed" className="flex flex-col justify-between p-6 surface w-full h-44 select-none relative overflow-hidden transition-all duration-700">
             <div className="flex justify-between items-center z-10">
-                <span className="text-[10px] tracking-widest uppercase text-neutral-400 font-medium flex items-center gap-1.5">
-                    <Coffee size={10} className={isWorkMode ? 'text-neutral-400' : 'text-emerald-500 animate-pulse'} />
+                <span className="text-label tracking-widest uppercase text-secondary font-medium flex items-center gap-1.5">
+                    <Coffee size={10} className={isWorkMode ? 'text-tertiary' : 'text-emerald-500 animate-pulse'} />
                     {isWorkMode ? 'Focus Session' : 'Short Break'}
                 </span>
                 <div className="flex gap-1.5">
                     <button
                         onClick={() => switchMode(true)}
-                        className={`px-2 py-0.5 rounded-lg text-[9px] font-mono transition-all ${isWorkMode
+                        className={`px-2 py-0.5 rounded-lg text-label font-mono transition-all ${isWorkMode
                             ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-950 font-semibold'
-                            : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200'
+                            : 'text-secondary hover:text-neutral-600 dark:hover:text-neutral-200'
                             }`}
                     >
                         WORK
                     </button>
                     <button
                         onClick={() => switchMode(false)}
-                        className={`px-2 py-0.5 rounded-lg text-[9px] font-mono transition-all ${!isWorkMode
+                        className={`px-2 py-0.5 rounded-lg text-label font-mono transition-all ${!isWorkMode
                             ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-950 font-semibold'
-                            : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200'
+                            : 'text-secondary hover:text-neutral-600 dark:hover:text-neutral-200'
                             }`}
                     >
                         BREAK
@@ -121,7 +121,7 @@ const Pomodoro = () => {
                     <span className="text-4.5xl md:text-5xl font-extralight tracking-tighter text-neutral-800 dark:text-neutral-50 leading-none">
                         {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
                     </span>
-                    <span className="text-[9px] tracking-widest uppercase text-neutral-400/80 font-medium font-sans">
+                    <span className="text-label tracking-widest uppercase text-tertiary font-medium font-sans">
                         {isActive ? 'Running' : 'Paused'}
                     </span>
                 </div>
@@ -139,7 +139,7 @@ const Pomodoro = () => {
                     </button>
                     <button
                         onClick={resetTimer}
-                        className="p-2.5 rounded-full bg-neutral-200/50 dark:bg-neutral-950/50 text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-50 transition-colors"
+                        className="p-2.5 rounded-full bg-neutral-200/50 dark:bg-neutral-950/50 text-secondary hover:text-neutral-800 dark:hover:text-neutral-50 transition-colors"
                         title="Reset"
                     >
                         <RotateCcw size={13} />

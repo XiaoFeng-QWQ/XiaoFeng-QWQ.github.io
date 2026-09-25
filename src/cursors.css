@@ -34,137 +34,121 @@
     --cursor-unavailable: url('/cursors/dark/unavailable.cur');
 }
 
-body {
-    cursor: url('/cursors/light/pointer.cur'), url('/cursors/dark/pointer.cur'), default !important;
-}
+/* 自定义光标只在「有悬停能力的精细指针」设备上生效：
+   触屏 / 混合设备保持系统原生行为。
+   注意不要给裸 svg / path 挂手型光标——天气图标、太阳轨迹、频谱条都不是可点元素。 */
+@media (hover: hover) and (pointer: fine) {
 
-.dark body {
-    cursor: url('/cursors/dark/pointer.cur'), url('/cursors/light/pointer.cur'), default !important;
-}
+    body {
+        cursor: url('/cursors/light/pointer.cur'), url('/cursors/dark/pointer.cur'), default !important;
+    }
 
-a,
-button,
-button *,
-button svg,
-button path,
-[role="button"],
-[role="button"] *,
-.clickable,
-.clickable *,
-footer,
-footer *,
-footer>div,
-footer>div *,
-footer button,
-footer button *,
-footer button svg,
-footer button path,
-.cursor-pointer,
-.cursor-pointer *,
-svg,
-path {
-    cursor: url('/cursors/light/link.cur'), url('/cursors/dark/link.cur'), pointer !important;
-}
+    .dark body {
+        cursor: url('/cursors/dark/pointer.cur'), url('/cursors/light/pointer.cur'), default !important;
+    }
 
-.dark a,
-.dark button,
-.dark button *,
-.dark button svg,
-.dark button path,
-.dark [role="button"],
-.dark [role="button"] *,
-.dark .clickable,
-.dark .clickable *,
-.dark footer,
-.dark footer *,
-.dark footer>div,
-.dark footer>div *,
-.dark footer button,
-.dark footer button *,
-.dark footer button svg,
-.dark footer button path,
-.dark .cursor-pointer,
-.dark .cursor-pointer *,
-.dark svg,
-.dark path {
-    cursor: url('/cursors/dark/link.cur'), url('/cursors/light/link.cur'), pointer !important;
-}
+    a,
+    a *,
+    button,
+    button *,
+    [role="button"],
+    [role="button"] *,
+    .clickable,
+    .clickable *,
+    .cursor-pointer,
+    .cursor-pointer * {
+        cursor: url('/cursors/light/link.cur'), url('/cursors/dark/link.cur'), pointer !important;
+    }
 
-input,
-input *,
-textarea,
-textarea *,
-.terminal-area,
-.terminal-area * {
-    cursor: url('/cursors/light/beam.cur'), url('/cursors/dark/beam.cur'), text !important;
-}
+    .dark a,
+    .dark a *,
+    .dark button,
+    .dark button *,
+    .dark [role="button"],
+    .dark [role="button"] *,
+    .dark .clickable,
+    .dark .clickable *,
+    .dark .cursor-pointer,
+    .dark .cursor-pointer * {
+        cursor: url('/cursors/dark/link.cur'), url('/cursors/light/link.cur'), pointer !important;
+    }
 
-.dark input,
-.dark input *,
-.dark textarea,
-.dark textarea *,
-.dark .terminal-area,
-.dark .terminal-area * {
-    cursor: url('/cursors/dark/beam.cur'), url('/cursors/light/beam.cur'), text !important;
-}
+    input,
+    input *,
+    textarea,
+    textarea *,
+    .terminal-area,
+    .terminal-area * {
+        cursor: url('/cursors/light/beam.cur'), url('/cursors/dark/beam.cur'), text !important;
+    }
 
-*[draggable="true"],
-.dragging {
-    cursor: url('/cursors/light/move.cur'), url('/cursors/dark/move.cur'), move !important;
-}
+    .dark input,
+    .dark input *,
+    .dark textarea,
+    .dark textarea *,
+    .dark .terminal-area,
+    .dark .terminal-area * {
+        cursor: url('/cursors/dark/beam.cur'), url('/cursors/light/beam.cur'), text !important;
+    }
 
-.dark *[draggable="true"],
-.dark .dragging {
-    cursor: url('/cursors/dark/move.cur'), url('/cursors/light/move.cur'), move !important;
-}
+    *[draggable="true"],
+    .dragging {
+        cursor: url('/cursors/light/move.cur'), url('/cursors/dark/move.cur'), move !important;
+    }
 
-.resizer-horz {
-    cursor: url('/cursors/light/horz.cur'), url('/cursors/dark/horz.cur'), col-resize !important;
-}
+    .dark *[draggable="true"],
+    .dark .dragging {
+        cursor: url('/cursors/dark/move.cur'), url('/cursors/light/move.cur'), move !important;
+    }
 
-.resizer-vert {
-    cursor: url('/cursors/light/vert.cur'), url('/cursors/dark/vert.cur'), row-resize !important;
-}
+    .resizer-horz {
+        cursor: url('/cursors/light/horz.cur'), url('/cursors/dark/horz.cur'), col-resize !important;
+    }
 
-.resizer-dgn1 {
-    cursor: url('/cursors/light/dgn1.cur'), url('/cursors/dark/dgn1.cur'), nwse-resize !important;
-}
+    .resizer-vert {
+        cursor: url('/cursors/light/vert.cur'), url('/cursors/dark/vert.cur'), row-resize !important;
+    }
 
-.resizer-dgn2 {
-    cursor: url('/cursors/light/dgn2.cur'), url('/cursors/dark/dgn2.cur'), nesw-resize !important;
-}
+    .resizer-dgn1 {
+        cursor: url('/cursors/light/dgn1.cur'), url('/cursors/dark/dgn1.cur'), nwse-resize !important;
+    }
 
-[title*="help"],
-[role="help"],
-.help-cursor {
-    cursor: url('/cursors/light/help.cur'), url('/cursors/dark/help.cur'), help !important;
-}
+    .resizer-dgn2 {
+        cursor: url('/cursors/light/dgn2.cur'), url('/cursors/dark/dgn2.cur'), nesw-resize !important;
+    }
 
-.select-alternate {
-    cursor: url('/cursors/light/alternate.cur'), url('/cursors/dark/alternate.cur'), crosshair !important;
-}
+    [title*="help"],
+    [role="help"],
+    .help-cursor {
+        cursor: url('/cursors/light/help.cur'), url('/cursors/dark/help.cur'), help !important;
+    }
 
-[contenteditable="true"],
-.text-editor {
-    cursor: url('/cursors/light/handwriting.cur'), url('/cursors/dark/handwriting.cur'), text !important;
-}
+    .select-alternate {
+        cursor: url('/cursors/light/alternate.cur'), url('/cursors/dark/alternate.cur'), crosshair !important;
+    }
 
-.picker,
-.select-person {
-    cursor: url('/cursors/light/person.cur'), url('/cursors/dark/person.cur'), pointer !important;
-}
+    [contenteditable="true"],
+    .text-editor {
+        cursor: url('/cursors/light/handwriting.cur'), url('/cursors/dark/handwriting.cur'), text !important;
+    }
 
-.map-pin,
-.pin-cursor {
-    cursor: url('/cursors/light/pin.cur'), url('/cursors/dark/pin.cur'), pointer !important;
-}
+    .picker,
+    .select-person {
+        cursor: url('/cursors/light/person.cur'), url('/cursors/dark/person.cur'), pointer !important;
+    }
 
-.precision-select {
-    cursor: url('/cursors/light/precision.cur'), url('/cursors/dark/precision.cur'), crosshair !important;
-}
+    .map-pin,
+    .pin-cursor {
+        cursor: url('/cursors/light/pin.cur'), url('/cursors/dark/pin.cur'), pointer !important;
+    }
 
-.disabled,
-[disabled],
-.unavailable {
-    cursor: url('/cursors/light/unavailable.cur'), url('/cursors/dark/unavailable.cur'), not-allowed !important;
+    .precision-select {
+        cursor: url('/cursors/light/precision.cur'), url('/cursors/dark/precision.cur'), crosshair !important;
+    }
+
+    .disabled,
+    [disabled],
+    .unavailable {
+        cursor: url('/cursors/light/unavailable.cur'), url('/cursors/dark/unavailable.cur'), not-allowed !important;
+    }
 }

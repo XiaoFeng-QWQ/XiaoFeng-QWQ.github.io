@@ -3,6 +3,169 @@
 
 @variant dark (&:is(.dark *));
 
+/* ── 设计 token ────────────────────────────────────────────────
+   字号阶梯：原站最小 9px、正文 12px，中文在这个尺度下偏吃力，
+   且 12 → 14 之间没有中间档。这里把 label / readout 显式命名，
+   正文抬到 13px、次级标题 15px，并给所有小字一个 10px 下限。 */
+@theme {
+    --text-label: 0.625rem;
+    --text-label--line-height: 0.9375rem;
+    --text-readout: 0.6875rem;
+    --text-readout--line-height: 1rem;
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: 1.25rem;
+    --text-sm: 0.9375rem;
+    --text-sm--line-height: 1.4375rem;
+}
+
+/* 语义色与卡片材料。
+
+   卡面/内层/胶囊的每一个值都用 Tailwind 自己的调色板变量做 color-mix 复刻，
+   与重构前的 bg-white/2、dark:bg-neutral-900/15、bg-neutral-100/30 生成结果逐值一致
+   （Tailwind v4 就是这么编译这些类的，所以这里是精确还原而不是近似）。
+
+   原设计里有三档卡面层级，别拉平：
+     default  bg-white/2          neutral-900/15   大多数卡片（让背景网格透过来）
+     raised   bg-white/40         neutral-900/30   天气卡（更亮一档）
+     recessed bg-neutral-950/5    neutral-950/40   番茄钟（凹陷一档，描边也更弱）
+   内层容器（终端/贡献图内框）和胶囊（chip）用的是「比卡片更亮」的浅色 tint，
+   不是黑色压暗——压暗会让它们从凸起变凹坑。 */
+:root {
+    --text-secondary: #525252;
+    /* neutral-600 · 7.5:1 */
+    --text-tertiary: #737373;
+    /* neutral-500 · 4.6:1 */
+    --focus-ring: #171717;
+
+    --surface-bg: color-mix(in oklab, var(--color-white) 2%, transparent);
+    --surface-bg-raised: color-mix(in oklab, var(--color-white) 40%, transparent);
+    --surface-bg-recessed: color-mix(in oklab, var(--color-neutral-950) 5%, transparent);
+    --surface-border: color-mix(in oklab, var(--color-neutral-200) 50%, transparent);
+    --surface-border-weak: color-mix(in oklab, var(--color-neutral-200) 30%, transparent);
+    --surface-border-hover: var(--color-neutral-300);
+    --surface-border-hover-strong: var(--color-neutral-400);
+
+    --inset-bg: color-mix(in oklab, var(--color-neutral-100) 20%, transparent);
+    --inset-border: color-mix(in oklab, var(--color-neutral-200) 40%, transparent);
+
+    --chip-bg: color-mix(in oklab, var(--color-neutral-100) 40%, transparent);
+    --chip-border: color-mix(in oklab, var(--color-neutral-200) 50%, transparent);
+
+    --skeleton-bg: color-mix(in oklab, var(--color-neutral-200) 55%, transparent);
+}
+
+.dark {
+    --text-secondary: #a3a3a3;
+    /* neutral-400 · 7.9:1 on #060606 */
+    --text-tertiary: #8a8a8a;
+    --focus-ring: #e5e5e5;
+
+    --surface-bg: color-mix(in oklab, var(--color-neutral-900) 15%, transparent);
+    --surface-bg-raised: color-mix(in oklab, var(--color-neutral-900) 30%, transparent);
+    --surface-bg-recessed: color-mix(in oklab, var(--color-neutral-950) 40%, transparent);
+    --surface-border: color-mix(in oklab, var(--color-neutral-800) 40%, transparent);
+    --surface-border-weak: color-mix(in oklab, var(--color-neutral-800) 20%, transparent);
+    --surface-border-hover: var(--color-neutral-700);
+    --surface-border-hover-strong: var(--color-neutral-700);
+
+    --inset-bg: color-mix(in oklab, var(--color-neutral-950) 20%, transparent);
+    --inset-border: color-mix(in oklab, var(--color-neutral-800) 30%, transparent);
+
+    --chip-bg: color-mix(in oklab, var(--color-neutral-900) 30%, transparent);
+    --chip-border: color-mix(in oklab, var(--color-neutral-800) 50%, transparent);
+
+    --skeleton-bg: color-mix(in oklab, var(--color-neutral-800) 60%, transparent);
+}
+
+/* 次级 / 三级文字：一个类吃掉所有 light/dark 配对，之后调对比度只改这里 */
+@utility text-secondary {
+    color: var(--text-secondary);
+}
+
+@utility text-tertiary {
+    color: var(--text-tertiary);
+}
+
+/* 卡片材料：全站唯一的「一张卡」定义。
+   hover 只改描边——这是重构前就有的交互语言，底色与投影都不动，
+   之前擅自加「底色抬升 + 大投影」正是廉价感的来源。 */
+@utility surface {
+    border-radius: 1.5rem;
+    border: 1px solid var(--surface-border);
+    background-color: var(--surface-bg);
+    /* 属性列表显式带上 opacity / translate：不少卡片自己还带入场动画，
+       两边声明同一组属性，谁在层叠里后生效都不会把入场动画打断 */
+    transition-property: background-color, border-color, opacity, translate, scale;
+    transition-duration: 320ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* 设计里本来就有两档例外，不能拉平（放在 hover 之前，保证 hover 仍能生效） */
+    &[data-variant='raised'] {
+        background-color: var(--surface-bg-raised);
+    }
+
+    &[data-variant='recessed'] {
+        background-color: var(--surface-bg-recessed);
+        border-color: var(--surface-border-weak);
+    }
+
+    &:hover {
+        border-color: var(--surface-border-hover);
+    }
+
+    /* 可点击的卡片（项目卡、技术栈格子）原本 hover 更强一档 */
+    &[data-hover='strong']:hover {
+        border-color: var(--surface-border-hover-strong);
+    }
+
+    /* 展开态（歌单浮层打开）：与原实现一致，只把描边提亮 */
+    &[data-active='true'] {
+        border-color: var(--surface-border-hover);
+    }
+
+    /* 2x 屏上用半像素描边，1px 在高分屏上会显粗、发虚 */
+    @media (min-resolution: 2dppx) {
+        border-width: 0.5px;
+    }
+}
+
+/* 内层容器 / 内框（终端、贡献图热力图外框）：
+   用的是「比卡片更亮」的浅色 tint，不是黑色压暗——压暗会让它从凸起变凹坑 */
+@utility surface-inset {
+    border-radius: 1rem;
+    border: 1px solid var(--inset-border);
+    background-color: var(--inset-bg);
+    transition-property: background-color, border-color;
+    transition-duration: 320ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+
+    &:hover {
+        border-color: var(--surface-border-hover);
+    }
+
+    @media (min-resolution: 2dppx) {
+        border-width: 0.5px;
+    }
+}
+
+/* 胶囊 / chip（Blog、@WiiRTwilight、retry 等）：同样是「更亮一档」的浅色 tint */
+@utility surface-chip {
+    border-radius: 0.75rem;
+    border: 1px solid var(--chip-border);
+    background-color: var(--chip-bg);
+    transition-property: background-color, border-color, color;
+    transition-duration: 320ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+
+    &:hover {
+        border-color: var(--surface-border-hover);
+    }
+
+    @media (min-resolution: 2dppx) {
+        border-width: 0.5px;
+    }
+}
+
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -12,6 +175,35 @@ body {
 
 ::-webkit-scrollbar {
     display: none;
+}
+
+/* ── 可访问性基线 ────────────────────────────────────────────── */
+
+/* 键盘焦点必须有可见反馈：全站原本 0 处 focus-visible，键盘用户完全看不到焦点。
+   不覆盖 border-radius——outline 会自动贴合元素自身的圆角，改它会让按钮在聚焦瞬间变形。
+
+   必须放在 base 层：无层样式的优先级高于所有 @layer，直接写在顶层会压过
+   Tailwind 的 outline-none，导致「显式关掉了焦点环」的输入框（如搜索框）
+   一点进去就冒出一圈描边。放进 base 层后，utilities 层的 outline-none 能正常生效。 */
+@layer base {
+    :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+    }
+}
+
+/* 降低动态：系统开启后，所有装饰动画与长缓动直接落到终态，
+   内容不会因为动画被截断（关键帧都是 forwards 或终态等于类名值） */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 /* --- View Transitions API 主题切换重置 --- */
@@ -143,6 +335,67 @@ body {
     backface-visibility: hidden;
     transform-style: preserve-3d;
     will-change: transform;
+}
+
+/* --- 浮层入场动画 ---
+   歌单/歌词浮层是「打开才挂载」的元素，挂载那一帧类名已经是展开态，
+   transition 没有起始值可插值（不会播），所以入场必须交给 animation。
+   刻意不加 fill（forwards/both）：动画结束后由类名接管，收起时的 transition 才不会被覆盖。
+   这里动的是独立属性 translate / scale，与类名用的是同一组属性，避免和 transform 叠加。 */
+@keyframes panel-pop-in {
+    from {
+        opacity: 0;
+        translate: 0 -6px;
+        scale: 0.98;
+    }
+}
+
+.animate-panel-pop-in {
+    animation: panel-pop-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --- 搜索引擎切换：引擎名从读数槽下方翻上来 ---
+   同样是「切换即重新挂载」的元素，所以用 animation（挂载必定播一次）。
+   槽体由外层固定宽度 + overflow-hidden 提供，名字长短不同也不会让按钮宽度跳。 */
+@keyframes engine-roll {
+    from {
+        opacity: 0;
+        translate: 0 100%;
+    }
+}
+
+.animate-engine-roll {
+    animation: engine-roll 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --- Focus Agenda：任务行入场 + 勾选反馈 ---
+   行入场用 backwards 填充：有 animation-delay 时，延迟期间必须保持起始态（不可见），
+   否则元素会先以终态闪一下再跳到起点。 */
+@keyframes task-in {
+    from {
+        opacity: 0;
+        translate: 0 4px;
+    }
+}
+
+.animate-task-in {
+    animation: task-in 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* 勾选：对勾从缩小状态弹出来，60% 处轻微过冲 */
+@keyframes check-pop {
+    from {
+        opacity: 0;
+        scale: 0.55;
+    }
+
+    60% {
+        scale: 1.15;
+    }
+}
+
+.animate-check-pop {
+    animation: check-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ── 底部导航 gnav：胶囊玻璃坞 + 两阶段弹性指示器 ─────────

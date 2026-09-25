@@ -56,7 +56,7 @@ const TemporalArc = () => {
                     <circle cx="40" cy="35" r="3" className="fill-neutral-400 dark:fill-neutral-700" />
                 )}
             </svg>
-            <span className="text-[9px] tracking-[0.2em] uppercase text-neutral-400/80 mt-1.5 font-medium">
+            <span className="text-label tracking-[0.2em] uppercase text-tertiary mt-1.5 font-medium">
                 {coords.isDay ? "Sun Transit" : "Night Cycle"}
             </span>
         </div>

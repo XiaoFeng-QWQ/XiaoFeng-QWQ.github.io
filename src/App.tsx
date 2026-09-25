@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type FormEvent, type CSSProperties } from 
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom';
 import {
     Globe, Sun, Moon, Command, ArrowRight, Disc3, User, ArrowUpRight,
-    Compass, SkipForward, SkipBack, ListMusic, Repeat, Repeat1, Shuffle
+    Compass, SkipForward, SkipBack, ListMusic, Repeat, Repeat1, Shuffle, X
 } from 'lucide-react';
 
 // 导入常量配置
@@ -25,12 +25,12 @@ import PixelGrid from './components/PixelGrid';
 import RecentActivityCard from './components/RecentActivityCard';
 import Pomodoro from './components/Pomodoro';
 import AgendaList from './components/AgendaList';
+import CardState, { CardSkeleton } from './components/CardState';
 
 // 应用核心逻辑组件
 function AppContent() {
     const [time, setTime] = useState(new Date());
     const [query, setQuery] = useState('');
-    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const [isMounted, setIsMounted] = useState(false);
 
     // 从本地存储中读取搜索引擎设置
@@ -61,8 +61,16 @@ function AppContent() {
     // 使用自定义 Hooks
     const { isDark, toggleTheme } = useTheme();
     const { tasks, newTaskText, setNewTaskText, toggleTask, addTask, deleteTask } = useTasks();
-    const weather = useWeather();
-    const { githubProfile, githubProjects, activityGrid, recentEvents } = useGithub();
+    const { weather, status: weatherStatus, reloadWeather } = useWeather();
+    const {
+        githubProfile,
+        githubProjects,
+        activityGrid,
+        recentEvents,
+        status: githubStatus,
+        activitySource,
+        reloadGithub
+    } = useGithub();
 
     // 路由相关状态
     const location = useLocation();
@@ -87,16 +95,38 @@ function AppContent() {
     // 音乐播放器 Hook
     const musicPlayer = useMusicPlayer(currentPage);
 
-    // 记录上一个 tab，用于内容平移方向判断
-    const prevExpandedTabRef = useRef(musicPlayer.expandedTab);
-    const prevDirectionRef = useRef<'right' | 'left'>('right');
-    if (prevExpandedTabRef.current !== musicPlayer.expandedTab) {
-        // 切到歌词(右侧) => 内容从右滑入；切到列表(左侧) => 内容从左滑入
-        prevDirectionRef.current = musicPlayer.expandedTab === 'lyrics' ? 'right' : 'left';
-        prevExpandedTabRef.current = musicPlayer.expandedTab;
-    }
+    // 歌单/歌词面板：收起动画进行中仍保留内容，动画结束后再卸载
+    const [playlistPanelRendered, setPlaylistPanelRendered] = useState(musicPlayer.isPlaylistOpen);
+    useEffect(() => {
+        if (musicPlayer.isPlaylistOpen) {
+            setPlaylistPanelRendered(true);
+        } else {
+            // 延迟到收起动画结束后再卸载，避免文本提前消失（与浮层动画时长一致）
+            const timer = setTimeout(() => setPlaylistPanelRendered(false), 260);
+            return () => clearTimeout(timer);
+        }
+    }, [musicPlayer.isPlaylistOpen]);
 
-    // 自动计算激活 tab 下划线的位置与宽度
+    // tab 内容的横向切换方向：null 表示不播。
+    // 浮层每次打开都是一次重新挂载（收起后会卸载），若照旧无条件挂动画类，
+    // 挂载瞬间就会播一次「切换」动画；这里只在「浮层已展开 + tab 真的变了」时才给方向。
+    const prevPanelOpenRef = useRef(musicPlayer.isPlaylistOpen);
+    const prevExpandedTabRef = useRef(musicPlayer.expandedTab);
+    const panelSlideRef = useRef<'right' | 'left' | null>(null);
+    if (!musicPlayer.isPlaylistOpen) {
+        // 收起后等浮层真正卸载再复位，避免收起过程中把动画掐断造成回弹
+        if (!playlistPanelRendered) panelSlideRef.current = null;
+    } else if (!prevPanelOpenRef.current) {
+        // 本次是「刚打开」：内容交给浮层自身的淡入 + 缩放，不横向滑
+        panelSlideRef.current = null;
+    } else if (prevExpandedTabRef.current !== musicPlayer.expandedTab) {
+        // 切到歌词(右侧) => 内容从右滑入；切到列表(左侧) => 内容从左滑入
+        panelSlideRef.current = musicPlayer.expandedTab === 'lyrics' ? 'right' : 'left';
+    }
+    prevPanelOpenRef.current = musicPlayer.isPlaylistOpen;
+    prevExpandedTabRef.current = musicPlayer.expandedTab;
+
+    // 自动计算激活 tab 下划线的位置与宽度（浮层挂载后再量一次，否则首次展开时下划线宽度为 0）
     const tabsRef = useRef<HTMLDivElement>(null);
     const [underlinePos, setUnderlinePos] = useState({ left: 0, width: 0 });
     useEffect(() => {
@@ -108,19 +138,33 @@ function AppContent() {
             left: activeBtn.offsetLeft,
             width: activeBtn.offsetWidth
         });
-    }, [musicPlayer.expandedTab]);
+    }, [musicPlayer.expandedTab, musicPlayer.isPlaylistOpen, playlistPanelRendered]);
 
-    // 歌单/歌词面板：收起动画进行中仍保留内容，动画结束后再卸载
-    const [playlistPanelRendered, setPlaylistPanelRendered] = useState(musicPlayer.isPlaylistOpen);
+    // 歌单/歌词浮层：点击浮层外部或按 Esc 收起
+    const musicPanelRef = useRef<HTMLDivElement>(null);
+    const setIsPlaylistOpen = musicPlayer.setIsPlaylistOpen;
     useEffect(() => {
-        if (musicPlayer.isPlaylistOpen) {
-            setPlaylistPanelRendered(true);
-        } else {
-            // 延迟到收起动画结束后再卸载，避免文本提前消失
-            const timer = setTimeout(() => setPlaylistPanelRendered(false), 350);
-            return () => clearTimeout(timer);
-        }
-    }, [musicPlayer.isPlaylistOpen]);
+        if (!musicPlayer.isPlaylistOpen) return;
+
+        const closePanel = () => setIsPlaylistOpen(false);
+        const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+            if (musicPanelRef.current && !musicPanelRef.current.contains(e.target as Node)) {
+                closePanel();
+            }
+        };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') closePanel();
+        };
+
+        document.addEventListener('mousedown', handlePointerDown);
+        document.addEventListener('touchstart', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('touchstart', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [musicPlayer.isPlaylistOpen, setIsPlaylistOpen]);
 
     // 虚拟文件系统和终端 Hook
     const [rootDir] = useState(() => createRootDir(githubProfile));
@@ -249,8 +293,27 @@ function AppContent() {
         return () => clearInterval(timer);
     }, []);
 
+    // 鼠标跟随的环境光：直接写 CSS 变量而不是 setState。
+    // 原来每次 mousemove 都重渲染整个 App（含 371 格的贡献图），现在零重渲染。
+    // 同时尊重「降低动态」偏好：开启时完全不启用这层跟随。
+    const glowRef = useRef<HTMLDivElement>(null);
+    const prefersReducedMotionRef = useRef(false);
+    useEffect(() => {
+        const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        prefersReducedMotionRef.current = motionQuery.matches;
+        const handleMotionChange = (e: MediaQueryListEvent) => {
+            prefersReducedMotionRef.current = e.matches;
+        };
+        motionQuery.addEventListener('change', handleMotionChange);
+        return () => motionQuery.removeEventListener('change', handleMotionChange);
+    }, []);
+
     const handleMouseMove = (e: React.MouseEvent) => {
-        setMousePos({ x: e.clientX, y: e.clientY });
+        if (prefersReducedMotionRef.current) return;
+        const glow = glowRef.current;
+        if (!glow) return;
+        glow.style.setProperty('--glow-x', `${e.clientX}px`);
+        glow.style.setProperty('--glow-y', `${e.clientY}px`);
     };
 
     // 底部导航两阶段弹性指示器：stretch(覆盖新旧两槽) -> settle(收缩到目标槽)
@@ -327,9 +390,10 @@ function AppContent() {
                 }`} />
 
             <div
+                ref={glowRef}
                 className="absolute inset-0 pointer-events-none transition-opacity duration-1000 opacity-100 dark:opacity-80"
                 style={{
-                    background: `radial-gradient(500px circle at ${mousePos.x}px ${mousePos.y}px, ${isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.012)'}, transparent 80%)`
+                    background: `radial-gradient(500px circle at var(--glow-x, 50%) var(--glow-y, 40%), ${isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.012)'}, transparent 80%)`
                 }}
             />
 
@@ -339,21 +403,21 @@ function AppContent() {
                     href="https://xiaofengqwq.com/"
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-2 group/logo outline-none"
+                    className="flex items-center gap-2 group/logo"
                     title="访问个人域名: xiaofengqwq.com"
                 >
-                    <Command size={14} className="text-neutral-400 group-hover/logo:text-neutral-900 dark:group-hover/logo:text-white transition-colors" />
-                    <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-neutral-400 group-hover/logo:text-neutral-900 dark:group-hover/logo:text-white transition-colors">
+                    <Command size={14} className="text-tertiary group-hover/logo:text-neutral-900 dark:group-hover/logo:text-white transition-colors" />
+                    <span className="text-label tracking-[0.25em] uppercase font-semibold text-secondary group-hover/logo:text-neutral-900 dark:group-hover/logo:text-white transition-colors">
                         xiaofengqwq.com
                     </span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-neutral-200/50 dark:bg-neutral-900/60 text-neutral-500 font-mono scale-90 transition-colors">
+                    <span className="text-label px-1.5 py-0.5 rounded-lg bg-neutral-200/50 dark:bg-neutral-900/60 text-neutral-500 font-mono scale-90 transition-colors">
                         枫
                     </span>
                 </a>
 
                 <button
                     onClick={toggleTheme}
-                    className="p-2.5 rounded-full hover:bg-neutral-200/50 dark:hover:bg-neutral-900/50 text-neutral-400 dark:text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 transition-all duration-500"
+                    className="p-2.5 rounded-full hover:bg-neutral-200/50 dark:hover:bg-neutral-900/50 text-secondary hover:text-neutral-900 dark:hover:text-neutral-100 transition-all duration-500"
                 >
                     {isDark ? <Moon size={16} /> : <Sun size={16} />}
                 </button>
@@ -363,7 +427,7 @@ function AppContent() {
 
                 {/* 第一页：个人主页 (Identity) */}
                 <div className={`${getPageClass(0)} grid-cols-1`}>
-                    <div className={`flex flex-col justify-between p-8 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 hover:border-neutral-300 dark:hover:border-neutral-700 w-full select-none transition-all duration-700 ease-out delay-75 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                    <div className={`flex flex-col justify-between p-8 surface w-full transition-all duration-700 ease-out delay-75 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                         }`}>
 
                         {/* 内部双栏布局 */}
@@ -373,14 +437,14 @@ function AppContent() {
                             <div className="lg:col-span-5 flex flex-col justify-between min-h-75">
                                 <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
                                     <div>
-                                        <span className="text-[10px] tracking-widest uppercase text-neutral-400 font-medium">Digital Identity</span>
+                                        <span className="text-label tracking-widest uppercase text-secondary font-medium">Digital Identity</span>
                                         <h2 className="text-3xl font-light text-neutral-800 dark:text-neutral-100 mt-4 tracking-tight leading-none">
                                             XiaoFeng_QWQ
                                         </h2>
-                                        <p className="text-sm font-light text-neutral-500 dark:text-neutral-400 mt-1">
+                                        <p className="text-sm font-light text-secondary mt-1">
                                             Full-Stack Developer & Designer
                                         </p>
-                                        <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-6 leading-relaxed max-w-sm">
+                                        <p className="text-xs text-secondary mt-6 leading-relaxed max-w-sm">
                                             {githubProfile.bio}
                                         </p>
                                     </div>
@@ -388,7 +452,7 @@ function AppContent() {
                                     {githubProfile.avatar ? (
                                         <img src={githubProfile.avatar} alt="Avatar" className="w-16 h-16 rounded-full border border-neutral-200 dark:border-neutral-800 grayscale hover:grayscale-0 transition-all duration-700 shrink-0" />
                                     ) : (
-                                        <div className="w-16 h-16 rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-neutral-400 shrink-0">
+                                        <div className="w-16 h-16 rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center text-secondary shrink-0">
                                             <User size={24} />
                                         </div>
                                     )}
@@ -399,7 +463,7 @@ function AppContent() {
                                         href="https://blog.xiaofengqwq.com/"
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="flex items-center gap-2 px-4 py-2 text-xs rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100/50 dark:bg-neutral-900/40 hover:border-neutral-400 dark:hover:border-neutral-600 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
+                                        className="flex items-center gap-2 px-4 py-2 text-xs surface-chip text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                                     >
                                         <Globe size={12} />
                                         <span>Blog</span>
@@ -408,7 +472,7 @@ function AppContent() {
                                         href="https://user.qzone.qq.com/1432777209/main"
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="flex items-center gap-2 px-4 py-2 text-xs rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100/50 dark:bg-neutral-900/40 hover:border-neutral-400 dark:hover:border-neutral-600 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
+                                        className="flex items-center gap-2 px-4 py-2 text-xs surface-chip text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                                     >
                                         <Compass size={12} />
                                         <span>QZone</span>
@@ -417,7 +481,7 @@ function AppContent() {
                                         href="https://www.travellings.cn/go.html"
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="w-24 h-8 rounded-xl border border-neutral-200/20 dark:border-neutral-800/20 bg-neutral-100/30 dark:bg-neutral-900/30 hover:border-neutral-400 dark:hover:border-neutral-600 transition-all bg-no-repeat bg-center"
+                                        className="w-24 h-8 surface-chip transition-all bg-no-repeat bg-center"
                                         style={{
                                             backgroundImage: `url(${isDark ? 'https://www.travellings.cn/assets/b.png' : 'https://www.travellings.cn/assets/w.png'})`,
                                             backgroundSize: '80% auto'
@@ -430,18 +494,18 @@ function AppContent() {
                             {/* 右侧：终端 */}
                             <div
                                 onClick={() => terminal.terminalInputRef.current?.focus()}
-                                className="lg:col-span-7 flex flex-col p-6 rounded-2xl bg-neutral-100/20 dark:bg-neutral-950/20 border border-neutral-200/40 dark:border-neutral-800/30 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-700 cursor-text w-full min-h-75 select-none font-mono text-[11px]"
+                                className="lg:col-span-7 flex flex-col p-6 surface-inset transition-all duration-700 cursor-text w-full min-h-75 select-none font-mono text-readout"
                             >
                                 <div className="flex justify-between items-center border-b border-neutral-200/50 dark:border-neutral-800/30 pb-2.5 mb-3.5 shrink-0 select-none">
                                     <div className="flex items-center gap-1.5">
                                         <span className="w-2.5 h-2.5 rounded-full bg-red-400/90 transition-colors"></span>
                                         <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/90 transition-colors"></span>
                                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/90 transition-colors"></span>
-                                        <span className="text-[10px] text-neutral-400 dark:text-neutral-500 ml-1.5 font-sans">Windows PowerShell 7.6.3</span>
+                                        <span className="text-label text-secondary ml-1.5 font-sans">Windows PowerShell 7.6.3</span>
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto scrollbar-none pr-1 space-y-2 text-neutral-600 dark:text-neutral-300 font-mono text-[11px] max-h-55 leading-relaxed">
+                                <div className="flex-1 overflow-y-auto scrollbar-none pr-1 space-y-2 text-neutral-600 dark:text-neutral-300 font-mono text-readout max-h-55 leading-relaxed">
                                     {terminal.terminalHistory.map((line) => {
                                         if (line.type === 'input') {
                                             return (
@@ -453,20 +517,20 @@ function AppContent() {
                                         }
                                         if (line.type === 'system') {
                                             return (
-                                                <p key={line.id} className="text-neutral-400 dark:text-neutral-500 italic select-none">
+                                                <p key={line.id} className="text-secondary italic select-none">
                                                     {line.text}
                                                 </p>
                                             );
                                         }
                                         if (line.type === 'error') {
                                             return (
-                                                <pre key={line.id} className="wrap-break-word pl-2 text-red-500 dark:text-red-400 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text selection:bg-red-500/30">
+                                                <pre key={line.id} className="wrap-break-word pl-2 text-red-500 dark:text-red-400 font-mono text-readout leading-relaxed whitespace-pre-wrap select-text selection:bg-red-500/30">
                                                     {line.text}
                                                 </pre>
                                             );
                                         }
                                         return (
-                                            <pre key={line.id} className="wrap-break-word pl-2 text-neutral-600 dark:text-neutral-300 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
+                                            <pre key={line.id} className="wrap-break-word pl-2 text-neutral-600 dark:text-neutral-300 font-mono text-readout leading-relaxed whitespace-pre-wrap select-text">
                                                 {line.text}
                                             </pre>
                                         );
@@ -481,7 +545,7 @@ function AppContent() {
                                     <div className="flex-1 flex items-center relative overflow-hidden">
                                         {/* 补全提示 - 显示在光标后面 */}
                                         {terminal.completionSuggestion && (
-                                            <span className="text-neutral-400/50 dark:text-neutral-500/50 font-mono text-[11px] italic absolute select-none pointer-events-none whitespace-pre ml-1" style={{ left: `${(terminal.terminalInput.length + 1) * 6.6}px` }}>
+                                            <span className="text-neutral-400/50 dark:text-neutral-500/50 font-mono text-readout italic absolute select-none pointer-events-none whitespace-pre ml-1" style={{ left: `${(terminal.terminalInput.length + 1) * 6.6}px` }}>
                                                 {terminal.completionSuggestion}
                                             </span>
                                         )}
@@ -491,8 +555,8 @@ function AppContent() {
                                             value={terminal.terminalInput}
                                             onChange={(e) => terminal.setTerminalInput(e.target.value)}
                                             onKeyDown={terminal.handleKeyDown}
-                                            placeholder={terminal.promptState ? 'Enter path...' : 'Type command (e.g. ls, cd documents, cat about.txt)...'}
-                                            className="w-full bg-transparent border-none outline-none text-neutral-800 dark:text-neutral-100 font-mono text-[11px] p-0 focus:ring-0 placeholder:text-neutral-400/50 caret-transparent"
+                                            placeholder={terminal.promptState ? 'Enter path...' : 'Type command...'}
+                                            className="w-full bg-transparent border-none outline-none text-neutral-800 dark:text-neutral-100 font-mono text-readout p-0 focus:ring-0 placeholder:text-neutral-400/50 caret-transparent"
                                             autoComplete="off"
                                         />
                                         {/* 光标 */}
@@ -508,16 +572,22 @@ function AppContent() {
 
                 {/* 第二页：工作空间 (Workspace) */}
                 <div className={`${getPageClass(1)} grid-cols-1 lg:grid-cols-12 gap-8`}>
-                    <div className={`lg:col-span-12 w-full flex justify-center transition-[opacity,transform] duration-700 ease-out delay-50 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                    <div className={`lg:col-span-12 w-full flex justify-center transition-[opacity,translate] duration-700 ease-out delay-50 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                         <form onSubmit={handleSearch} className="flex items-center w-full max-w-4xl gap-3 p-2.5 rounded-2xl border border-neutral-200/50 dark:border-neutral-800/40 bg-white/40 dark:bg-neutral-900/10 hover:bg-white/70 dark:hover:bg-neutral-900/20 focus-within:border-neutral-400 dark:focus-within:border-neutral-600 focus-within:bg-white/80 dark:focus-within:bg-neutral-900/30 shadow-sm hover:shadow focus-within:shadow-md transition-all duration-500 group outline-none">
                             <button
                                 type="button"
                                 onClick={() => setEngineIndex((prev) => (prev + 1) % SEARCH_ENGINES.length)}
-                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-100/80 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-500 dark:text-neutral-400 transition-all outline-none text-xs font-semibold shrink-0"
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-100/80 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-500 dark:text-neutral-400 transition-all text-xs font-semibold shrink-0"
                                 title="Click to switch search engine, or press Tab while focused"
                             >
                                 <Globe size={13} />
-                                <span>{currentEngine.name}</span>
+                                {/* 固定宽度的读数槽：名字长短不同不会让按钮宽度跳动，
+                                    keyed 重挂载 + 裁切共同构成「翻牌」效果 */}
+                                <span className="flex h-5 w-15 items-center justify-center overflow-hidden">
+                                    <span key={currentEngine.id} className="animate-engine-roll block w-full text-center">
+                                        {currentEngine.name}
+                                    </span>
+                                </span>
                             </button>
 
                             <input
@@ -529,14 +599,14 @@ function AppContent() {
                                 className="flex-1 bg-transparent text-sm text-neutral-800 dark:text-neutral-100 px-2 outline-none placeholder:text-neutral-400 dark:placeholder:text-neutral-600 font-light"
                             />
 
-                            <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] text-neutral-400 font-mono pr-2 select-none shrink-0">
+                            <span className="hidden sm:inline-flex items-center gap-1.5 text-label text-secondary font-mono pr-2 select-none shrink-0">
                                 <kbd className="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-900 border border-neutral-200/50 dark:border-neutral-800">Ctrl + K</kbd>
                                 <span>to focus</span>
                             </span>
 
                             <button
                                 type="submit"
-                                className="p-2.5 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-white transition-colors outline-none shrink-0"
+                                className="p-2.5 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 hover:bg-neutral-800 dark:hover:bg-white transition-colors shrink-0"
                             >
                                 <ArrowRight size={14} />
                             </button>
@@ -544,9 +614,9 @@ function AppContent() {
                     </div>
 
                     {/* 左一栏：核心时间与备忘待办 */}
-                    <section className={`lg:col-span-5 flex flex-col justify-center items-center lg:items-start select-none transition-[opacity,transform] duration-700 ease-out delay-100 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                    <section className={`lg:col-span-5 flex flex-col justify-center items-center lg:items-start transition-[opacity,translate] duration-700 ease-out delay-100 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                         }`}>
-                        <span className="text-xs tracking-[0.3em] font-medium text-neutral-400 uppercase mb-4">
+                        <span className="text-xs tracking-[0.3em] font-medium text-secondary uppercase mb-4">
                             {time.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                         </span>
 
@@ -561,7 +631,7 @@ function AppContent() {
                                     }).replace(/\s[A-Z]{2}/, '')}
                                 </h1>
                                 {isTwelveHour && (
-                                    <span className="text-xl font-light font-serif text-neutral-400 group-hover/time:text-neutral-600 transition-colors uppercase">
+                                    <span className="text-xl font-light font-serif text-secondary group-hover/time:text-neutral-600 transition-colors uppercase">
                                         {time.getHours() >= 12 ? 'pm' : 'am'}
                                     </span>
                                 )}
@@ -584,114 +654,138 @@ function AppContent() {
                     </section>
 
                     {/* 右一栏：环境状态面板 */}
-                    <section className={`lg:col-span-7 flex flex-col gap-4 w-full transition-[opacity,transform] duration-700 ease-out delay-150 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                    <section className={`lg:col-span-7 flex flex-col gap-4 w-full transition-[opacity,translate] duration-700 ease-out delay-150 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                         }`}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* 天气小组件 */}
-                            <div className="flex flex-col justify-between p-6 rounded-3xl bg-white/40 dark:bg-neutral-900/30 border border-neutral-200/50 dark:border-neutral-800/50 hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-700 select-none h-32">
-                                <div className="flex justify-between items-start text-neutral-500 dark:text-neutral-400">
+                            <div data-variant="raised" className="flex flex-col justify-between p-6 surface transition-all duration-700 h-32">
+                                <div className="flex justify-between items-start text-secondary">
                                     <Globe size={20} />
-                                    <Sun size={24} className="text-neutral-400 dark:text-neutral-300" />
+                                    <Sun size={24} className="text-tertiary dark:text-neutral-300" />
                                 </div>
-                                <div>
-                                    <p className="text-2xl font-light text-neutral-800 dark:text-neutral-200 transition-colors duration-700">
-                                        {weather.temp} / {weather.cond}
-                                    </p>
-                                    <p className="text-xs text-neutral-500 mt-1 transition-colors duration-700">
-                                        {weather.city}
-                                    </p>
-                                </div>
+                                {weatherStatus === 'ready' ? (
+                                    <div>
+                                        <p className="text-2xl font-light text-neutral-800 dark:text-neutral-200 transition-colors duration-700">
+                                            {weather.temp} / {weather.cond}
+                                        </p>
+                                        <p className="text-xs text-neutral-500 mt-1 transition-colors duration-700">
+                                            {weather.city}
+                                        </p>
+                                    </div>
+                                ) : weatherStatus === 'loading' ? (
+                                    <CardState variant="loading" rows={2} />
+                                ) : (
+                                    <div className="flex items-end justify-between gap-2">
+                                        <p className="text-2xl font-light text-neutral-800 dark:text-neutral-200">— / —</p>
+                                        <button
+                                            type="button"
+                                            onClick={reloadWeather}
+                                            title="重新获取天气"
+                                            className="surface-chip px-2 py-1 font-mono text-label text-secondary transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
+                                        >
+                                            retry
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
-                            {/* 音乐播放器 */}
-                            <div
-                                className={`flex flex-col p-6 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 hover:border-neutral-300 dark:hover:border-neutral-700 w-full select-none transition-all duration-300 overflow-hidden ${musicPlayer.isPlaylistOpen ? 'h-67.5' : 'h-32'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-4 w-full">
-                                    <div
-                                        onClick={() => {
-                                            if (musicPlayer.playlist.length > 0) {
-                                                musicPlayer.setIsMusicPlaying(!musicPlayer.isMusicPlaying);
-                                            }
-                                        }}
-                                        className="w-12 h-12 rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center transition-all duration-1000 shrink-0 overflow-hidden cursor-pointer hover:scale-105"
-                                        style={{
-                                            animation: 'spin 10s linear infinite',
-                                            animationPlayState: (musicPlayer.isMusicPlaying && currentPage === 1) ? 'running' : 'paused'
-                                        }}
-                                        title={musicPlayer.isMusicPlaying ? '点击暂停' : '点击播放'}
-                                    >
-                                        {musicPlayer.musicInfo.pic ? (
-                                            <img src={musicPlayer.musicInfo.pic} alt="Album" className="w-full h-full object-cover opacity-80" />
-                                        ) : (
-                                            <Disc3 size={24} className="text-neutral-500 dark:text-neutral-400" />
-                                        )}
-                                    </div>
-                                    <div className="flex flex-col min-w-0 flex-1">
-                                        <span className="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                                            {musicPlayer.playlist.length > 0 && (
-                                                <span className="text-neutral-300 dark:text-neutral-700 font-mono">
-                                                    {musicPlayer.playlistIndex + 1}/{musicPlayer.playlist.length}
-                                                </span>
+                            {/* 音乐播放器：卡片高度固定，歌单/歌词以浮层向下展开，完全不参与布局流 */}
+                            <div ref={musicPanelRef} className="relative">
+                                <div
+                                    data-active={musicPlayer.isPlaylistOpen}
+                                    className="flex flex-col p-6 surface w-full h-32 overflow-hidden"
+                                >
+                                    <div className="flex items-center gap-4 w-full">
+                                        <div
+                                            onClick={() => {
+                                                if (musicPlayer.playlist.length > 0) {
+                                                    musicPlayer.setIsMusicPlaying(!musicPlayer.isMusicPlaying);
+                                                }
+                                            }}
+                                            className="w-12 h-12 rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center transition-all duration-1000 shrink-0 overflow-hidden cursor-pointer hover:scale-105"
+                                            style={{
+                                                animation: 'spin 10s linear infinite',
+                                                animationPlayState: (musicPlayer.isMusicPlaying && currentPage === 1) ? 'running' : 'paused'
+                                            }}
+                                            title={musicPlayer.isMusicPlaying ? '点击暂停' : '点击播放'}
+                                        >
+                                            {musicPlayer.musicInfo.pic ? (
+                                                <img src={musicPlayer.musicInfo.pic} alt="Album" className="w-full h-full object-cover opacity-80" />
+                                            ) : (
+                                                <Disc3 size={24} className="text-tertiary" />
                                             )}
-                                        </span>
-                                        <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300 truncate transition-colors duration-700">{musicPlayer.musicInfo.name}</span>
-                                        <span className="text-xs text-neutral-500 dark:text-neutral-500 truncate transition-colors duration-700">{musicPlayer.musicInfo.artist}</span>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1.5 shrink-0 ml-2">
-                                        <div className="flex items-center gap-1.5">
-                                            <button
-                                                onClick={musicPlayer.handlePrevTrack}
-                                                className="p-1 rounded-md text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-                                                title="上一首"
-                                            >
-                                                <SkipBack size={13} />
-                                            </button>
-                                            <button
-                                                onClick={musicPlayer.handleNextTrack}
-                                                className="p-1 rounded-md text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-                                                title="下一首"
-                                            >
-                                                <SkipForward size={13} />
-                                            </button>
-                                            <button
-                                                onClick={musicPlayer.togglePlayMode}
-                                                className={`p-1 rounded-md transition-colors ${musicPlayer.playMode !== 'sequence'
-                                                    ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
-                                                    : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                                                    }`}
-                                                title={musicPlayer.playMode === 'sequence' ? '顺序播放' : musicPlayer.playMode === 'single' ? '单曲循环' : '随机播放'}
-                                            >
-                                                {musicPlayer.playMode === 'sequence' && <Repeat size={13} />}
-                                                {musicPlayer.playMode === 'single' && <Repeat1 size={13} />}
-                                                {musicPlayer.playMode === 'shuffle' && <Shuffle size={13} />}
-                                            </button>
-                                            <button
-                                                onClick={() => musicPlayer.setIsPlaylistOpen(!musicPlayer.isPlaylistOpen)}
-                                                className={`p-1 rounded-md transition-colors ${musicPlayer.isPlaylistOpen
-                                                    ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
-                                                    : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                                                    }`}
-                                                title="歌单与歌词"
-                                            >
-                                                <ListMusic size={13} />
-                                            </button>
                                         </div>
-                                        {/* 音频频谱 */}
-                                        <div className="flex items-end gap-1 h-6 opacity-50 pr-1 mt-1">
-                                            <div ref={bar1Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
-                                            <div ref={bar2Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
-                                            <div ref={bar3Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
-                                            <div ref={bar4Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                            <span className="text-label font-semibold text-secondary uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                                                {musicPlayer.playlist.length > 0 && (
+                                                    <span className="text-neutral-300 dark:text-neutral-700 font-mono">
+                                                        {musicPlayer.playlistIndex + 1}/{musicPlayer.playlist.length}
+                                                    </span>
+                                                )}
+                                            </span>
+                                            <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300 truncate transition-colors duration-700">{musicPlayer.musicInfo.name}</span>
+                                            <span className="text-xs text-neutral-500 dark:text-neutral-500 truncate transition-colors duration-700">{musicPlayer.musicInfo.artist}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1.5 shrink-0 ml-2">
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    onClick={musicPlayer.handlePrevTrack}
+                                                    className="p-1 rounded-lg text-secondary hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
+                                                    title="上一首"
+                                                >
+                                                    <SkipBack size={13} />
+                                                </button>
+                                                <button
+                                                    onClick={musicPlayer.handleNextTrack}
+                                                    className="p-1 rounded-lg text-secondary hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
+                                                    title="下一首"
+                                                >
+                                                    <SkipForward size={13} />
+                                                </button>
+                                                <button
+                                                    onClick={musicPlayer.togglePlayMode}
+                                                    className={`p-1 rounded-lg transition-colors ${musicPlayer.playMode !== 'sequence'
+                                                        ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
+                                                        : 'text-secondary hover:text-neutral-700 dark:hover:text-neutral-200'
+                                                        }`}
+                                                    title={musicPlayer.playMode === 'sequence' ? '顺序播放' : musicPlayer.playMode === 'single' ? '单曲循环' : '随机播放'}
+                                                >
+                                                    {musicPlayer.playMode === 'sequence' && <Repeat size={13} />}
+                                                    {musicPlayer.playMode === 'single' && <Repeat1 size={13} />}
+                                                    {musicPlayer.playMode === 'shuffle' && <Shuffle size={13} />}
+                                                </button>
+                                                <button
+                                                    onClick={() => musicPlayer.setIsPlaylistOpen(!musicPlayer.isPlaylistOpen)}
+                                                    className={`p-1 rounded-lg transition-colors ${musicPlayer.isPlaylistOpen
+                                                        ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
+                                                        : 'text-secondary hover:text-neutral-700 dark:hover:text-neutral-200'
+                                                        }`}
+                                                    title="歌单与歌词"
+                                                >
+                                                    <ListMusic size={13} />
+                                                </button>
+                                            </div>
+                                            {/* 音频频谱 */}
+                                            <div className="flex items-end gap-1 h-6 opacity-50 pr-1 mt-1">
+                                                <div ref={bar1Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                                <div ref={bar2Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                                <div ref={bar3Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                                <div ref={bar4Ref} className="w-0.75 h-full bg-neutral-400 dark:bg-neutral-500 origin-bottom transition-transform duration-100 ease-out" style={{ transform: 'scaleY(0.1)' }} />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
+                                {/* 歌单/歌词浮层：绝对定位，不撑高卡片，也不挤动附近卡片 */}
                                 {playlistPanelRendered && (
-                                    <div className={`flex-1 mt-4 border-t border-neutral-200/50 dark:border-neutral-800/50 pt-3 flex flex-col min-h-0 transition-opacity duration-300 ${musicPlayer.isPlaylistOpen ? 'opacity-100' : 'opacity-0'}`}>
-                                        <div className="flex gap-4 items-center pb-1.5 shrink-0">
-                                            <div ref={tabsRef} className="relative flex gap-4 text-[10px] uppercase tracking-wider font-semibold text-neutral-400 dark:text-neutral-500">
+                                    <div
+                                        className={`absolute inset-x-0 top-full z-30 mt-3 flex flex-col overflow-hidden rounded-2xl border backdrop-blur-md bg-white/85 dark:bg-neutral-950/85 shadow-2xl shadow-neutral-900/10 dark:shadow-black/50 origin-top animate-panel-pop-in transition-[opacity,translate,scale] duration-[220ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${musicPlayer.isPlaylistOpen
+                                            ? 'opacity-100 scale-[1] translate-y-0 pointer-events-auto border-neutral-200/70 dark:border-neutral-800/60'
+                                            : 'opacity-0 scale-[0.98] -translate-y-1.5 pointer-events-none border-transparent'
+                                            }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-4 px-4 pt-3.5 pb-3 border-b border-neutral-200/60 dark:border-neutral-800/60 shrink-0">
+                                            <div ref={tabsRef} className="relative flex gap-4 text-label uppercase tracking-wider font-semibold text-secondary">
                                                 <button
                                                     data-tab="playlist"
                                                     onClick={() => musicPlayer.setExpandedTab('playlist')}
@@ -713,34 +807,46 @@ function AppContent() {
                                                     style={{ left: underlinePos.left, width: underlinePos.width }}
                                                 />
                                             </div>
+                                            <button
+                                                onClick={() => musicPlayer.setIsPlaylistOpen(false)}
+                                                className="p-0.5 -mr-1 rounded-lg text-neutral-300 dark:text-neutral-700 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+                                                title="收起"
+                                            >
+                                                <X size={11} />
+                                            </button>
                                         </div>
 
-                                        <div key={musicPlayer.expandedTab} className={`flex-1 overflow-y-auto scrollbar-none min-h-0 pt-2 ${prevDirectionRef.current === 'right' ? 'animate-slide-x' : 'animate-slide-x-reverse'}`}>
+                                        <div key={musicPlayer.expandedTab} className={`h-48 ${panelSlideRef.current === 'right' ? 'animate-slide-x' : panelSlideRef.current === 'left' ? 'animate-slide-x-reverse' : ''}`}>
                                             {musicPlayer.expandedTab === 'playlist' ? (
-                                                <div className="space-y-1.5">
-                                                    {musicPlayer.playlist.map((song, idx) => (
-                                                        <div
-                                                            key={song.id || idx}
-                                                            onClick={() => musicPlayer.selectSong(idx)}
-                                                            className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer text-xs transition-all ${idx === musicPlayer.playlistIndex
-                                                                ? 'bg-neutral-200/55 dark:bg-neutral-900 text-neutral-900 dark:text-white font-medium'
-                                                                : 'hover:bg-neutral-100/50 dark:hover:bg-neutral-900/30 text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-                                                                }`}
-                                                        >
-                                                            <div className="flex items-center gap-2 truncate">
-                                                                <span className="font-mono text-[9px] w-4 opacity-60">
-                                                                    {String(idx + 1).padStart(2, '0')}
-                                                                </span>
-                                                                <span className="truncate">{song.name}</span>
+                                                <div className="h-full overflow-y-auto scrollbar-none p-2">
+                                                    <div className="space-y-1.5">
+                                                        {musicPlayer.playlist.length === 0 && (
+                                                            <CardState variant="empty" label="Playlist unavailable" hint="歌单接口没有返回数据" />
+                                                        )}
+                                                        {musicPlayer.playlist.map((song, idx) => (
+                                                            <div
+                                                                key={song.id || idx}
+                                                                onClick={() => musicPlayer.selectSong(idx)}
+                                                                className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer text-xs transition-all ${idx === musicPlayer.playlistIndex
+                                                                    ? 'bg-neutral-200/55 dark:bg-neutral-900 text-neutral-900 dark:text-white font-medium'
+                                                                    : 'hover:bg-neutral-100/50 dark:hover:bg-neutral-900/30 text-secondary hover:text-neutral-800 dark:hover:text-neutral-200'
+                                                                    }`}
+                                                            >
+                                                                <div className="flex items-center gap-2 truncate">
+                                                                    <span className="font-mono text-label w-4 opacity-60">
+                                                                        {String(idx + 1).padStart(2, '0')}
+                                                                    </span>
+                                                                    <span className="truncate">{song.name}</span>
+                                                                </div>
+                                                                <span className="text-label opacity-60 shrink-0 ml-2">{song.artist}</span>
                                                             </div>
-                                                            <span className="text-[10px] opacity-60 shrink-0 ml-2">{song.artist}</span>
-                                                        </div>
-                                                    ))}
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 <div
                                                     ref={musicPlayer.lyricsContainerRef}
-                                                    className="h-full overflow-y-auto scrollbar-none space-y-3.5 text-center py-10"
+                                                    className="h-full overflow-y-auto scrollbar-none space-y-3.5 text-center py-8 px-2"
                                                 >
                                                     {musicPlayer.lyrics.length > 0 ? (
                                                         musicPlayer.lyrics.map((lyric, idx) => {
@@ -749,9 +855,9 @@ function AppContent() {
                                                                 <p
                                                                     key={idx}
                                                                     data-index={idx}
-                                                                    className={`text-[11px] transition-all duration-300 px-4 leading-relaxed ${isActive
+                                                                    className={`text-readout transition-all duration-300 px-4 leading-relaxed ${isActive
                                                                         ? 'text-neutral-900 dark:text-white font-semibold scale-105'
-                                                                        : 'text-neutral-400/50 dark:text-neutral-600/50 hover:text-neutral-600 dark:hover:text-neutral-400'
+                                                                        : 'text-neutral-400/50 dark:text-neutral-600/50 hover:text-neutral-600 dark:hover:text-secondary'
                                                                         }`}
                                                                 >
                                                                     {lyric.text}
@@ -759,7 +865,7 @@ function AppContent() {
                                                             );
                                                         })
                                                     ) : (
-                                                        <p className="text-[11px] text-neutral-400/50 dark:text-neutral-600/50 italic py-6">
+                                                        <p className="text-readout text-neutral-400/50 dark:text-neutral-600/50 italic py-6">
                                                             No lyrics found or loading...
                                                         </p>
                                                     )}
@@ -781,40 +887,60 @@ function AppContent() {
                 {/* 第三页：项目履历 (Projects) */}
                 <div className={`${getPageClass(2)} grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`}>
                     <div className="col-span-1 md:col-span-2 lg:col-span-2">
-                        <PixelGrid gridData={activityGrid} />
+                        <PixelGrid
+                            gridData={activityGrid}
+                            status={githubStatus.activity}
+                            isSample={activitySource === 'sample'}
+                            onRetry={reloadGithub}
+                        />
                     </div>
 
                     <div className="col-span-1 md:col-span-2 lg:col-span-1">
-                        <RecentActivityCard events={recentEvents} />
+                        <RecentActivityCard
+                            events={recentEvents}
+                            status={githubStatus.events}
+                            onRetry={reloadGithub}
+                        />
                     </div>
 
-                    {githubProjects.length > 0 ? (
+                    {githubStatus.projects === 'loading' ? (
+                        Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} className="h-44" />)
+                    ) : githubStatus.projects === 'error' ? (
+                        <div className="col-span-1 md:col-span-2 lg:col-span-3 surface p-6">
+                            <CardState
+                                variant="error"
+                                label="GitHub API unreachable"
+                                hint="项目列表来自 api.github.com，可重试"
+                                onRetry={reloadGithub}
+                            />
+                        </div>
+                    ) : githubProjects.length === 0 ? (
+                        <div className="col-span-1 md:col-span-2 lg:col-span-3 surface p-6">
+                            <CardState variant="empty" label="No public repositories" hint="接口正常，这里暂时是空的" />
+                        </div>
+                    ) : (
                         githubProjects.map((project) => (
                             <a
                                 key={project.name}
                                 href={project.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="flex flex-col justify-between p-6 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 hover:border-neutral-400 dark:hover:border-neutral-700 transition-colors duration-300 group"
+                                data-hover="strong" className="flex flex-col justify-between p-6 surface group"
                             >
                                 <div>
                                     <div className="flex justify-between items-center mb-4">
-                                        <span className="text-[10px] tracking-widest uppercase text-neutral-400 font-medium">Repository</span>
-                                        <ArrowUpRight size={16} className="text-neutral-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                        <span className="text-label tracking-widest uppercase text-secondary font-medium">Repository</span>
+                                        <ArrowUpRight size={16} className="text-tertiary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                                     </div>
                                     <h3 className="text-lg font-medium text-neutral-800 dark:text-neutral-100 transition-colors">{project.name}</h3>
-                                    <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-2 leading-relaxed">
+                                    <p className="text-xs text-secondary mt-2 leading-relaxed">
                                         {project.desc}
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-3 mt-6 text-[10px] font-mono text-neutral-500">
+                                <div className="flex items-center gap-3 mt-6 text-label font-mono text-neutral-500">
                                     <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${project.color}`}></span>{project.lang}</span>
                                 </div>
                             </a>
-                        ))
-                    ) : (
-                        Array.from({ length: 3 }).map((_, i) => (
-                            <div key={i} className="animate-pulse flex flex-col justify-between p-6 rounded-3xl bg-neutral-200/20 dark:bg-neutral-800/10 border border-neutral-200/50 dark:border-neutral-800/40 h-44" />
                         ))
                     )}
                 </div>
@@ -825,10 +951,10 @@ function AppContent() {
                         <div
                             key={tech}
                             style={{ transitionDelay: `${idx * 60}ms` }}
-                            className={`flex flex-col justify-between p-6 rounded-2xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 hover:border-neutral-400 dark:hover:border-neutral-700 transition-[opacity,transform] duration-500 ease-out select-none group ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                            className={`flex flex-col justify-between p-6 rounded-2xl surface duration-500 ease-out select-none group ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                                 }`}
                         >
-                            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-900/50 flex items-center justify-center text-neutral-400 dark:text-semibold group-hover:text-neutral-900 dark:group-hover:text-neutral-100 transition-all">
+                            <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-900/50 flex items-center justify-center text-secondary dark:text-semibold group-hover:text-neutral-900 dark:group-hover:text-neutral-100 transition-all">
                                 <Command size={14} />
                             </div>
                             <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mt-6 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 transition-colors">
@@ -863,7 +989,7 @@ function AppContent() {
                                 }}
                                 className={`dock-slot flex items-center justify-center rounded-full transition-all duration-300 ${isActive
                                     ? 'text-neutral-700 dark:text-white'
-                                    : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-200'
+                                    : 'text-secondary hover:text-neutral-600 dark:hover:text-neutral-200'
                                     }`}
                                 title={item.name}
                             >
