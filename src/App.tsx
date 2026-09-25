@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent, type CSSProperties } from 'react';
 import { HashRouter, useLocation, useNavigate } from 'react-router-dom';
 import {
-    Globe, Sun, Moon, Command, ArrowRight, Disc3, User, ArrowUpRight, Compass, SkipForward, SkipBack, ListMusic
+    Globe, Sun, Moon, Command, ArrowRight, Disc3, User, ArrowUpRight,
+    Compass, SkipForward, SkipBack, ListMusic, Repeat, Repeat1, Shuffle
 } from 'lucide-react';
 
 // 导入常量配置
@@ -31,12 +32,6 @@ function AppContent() {
     const [query, setQuery] = useState('');
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const [isMounted, setIsMounted] = useState(false);
-    
-    // 自定义鼠标指针状态
-    const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
-    const [isHovering, setIsHovering] = useState(false);
-    const [isClicking, setIsClicking] = useState(false);
-    const [cursorVisible, setCursorVisible] = useState(true);
 
     // 从本地存储中读取搜索引擎设置
     const [engineIndex, setEngineIndex] = useState(() => {
@@ -60,8 +55,8 @@ function AppContent() {
         return false;
     });
 
-    const [dockWidth, setDockWidth] = useState(240);
-    const [dockMouseX, setDockMouseX] = useState<number | null>(null);
+    // 底部导航两阶段弹性指示器状态：x=平移位移、w=长度、phase=stretch(拉长)/settle(收缩)
+    const [dockInd, setDockInd] = useState({ x: 0, w: 0, phase: 'settle' as 'stretch' | 'settle' });
 
     // 使用自定义 Hooks
     const { isDark, toggleTheme } = useTheme();
@@ -92,48 +87,46 @@ function AppContent() {
     // 音乐播放器 Hook
     const musicPlayer = useMusicPlayer(currentPage);
 
+    // 记录上一个 tab，用于内容平移方向判断
+    const prevExpandedTabRef = useRef(musicPlayer.expandedTab);
+    const prevDirectionRef = useRef<'right' | 'left'>('right');
+    if (prevExpandedTabRef.current !== musicPlayer.expandedTab) {
+        // 切到歌词(右侧) => 内容从右滑入；切到列表(左侧) => 内容从左滑入
+        prevDirectionRef.current = musicPlayer.expandedTab === 'lyrics' ? 'right' : 'left';
+        prevExpandedTabRef.current = musicPlayer.expandedTab;
+    }
+
+    // 自动计算激活 tab 下划线的位置与宽度
+    const tabsRef = useRef<HTMLDivElement>(null);
+    const [underlinePos, setUnderlinePos] = useState({ left: 0, width: 0 });
+    useEffect(() => {
+        const el = tabsRef.current;
+        if (!el) return;
+        const activeBtn = el.querySelector<HTMLButtonElement>(`[data-tab="${musicPlayer.expandedTab}"]`);
+        if (!activeBtn) return;
+        setUnderlinePos({
+            left: activeBtn.offsetLeft,
+            width: activeBtn.offsetWidth
+        });
+    }, [musicPlayer.expandedTab]);
+
+    // 歌单/歌词面板：收起动画进行中仍保留内容，动画结束后再卸载
+    const [playlistPanelRendered, setPlaylistPanelRendered] = useState(musicPlayer.isPlaylistOpen);
+    useEffect(() => {
+        if (musicPlayer.isPlaylistOpen) {
+            setPlaylistPanelRendered(true);
+        } else {
+            // 延迟到收起动画结束后再卸载，避免文本提前消失
+            const timer = setTimeout(() => setPlaylistPanelRendered(false), 350);
+            return () => clearTimeout(timer);
+        }
+    }, [musicPlayer.isPlaylistOpen]);
+
     // 虚拟文件系统和终端 Hook
     const [rootDir] = useState(() => createRootDir(githubProfile));
     const terminal = useTerminal(rootDir);
 
-    // 自定义鼠标指针事件监听
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            setCursorPos({ x: e.clientX, y: e.clientY });
-        };
-
-        const handleMouseDown = () => setIsClicking(true);
-        const handleMouseUp = () => setIsClicking(false);
-
-        const handleMouseOver = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            if (target.matches('a, button, input, [role="button"], .clickable')) {
-                setIsHovering(true);
-            } else {
-                setIsHovering(false);
-            }
-        };
-
-        // 触摸设备隐藏自定义指针
-        const handleTouchStart = () => setCursorVisible(false);
-        const handleTouchEnd = () => setCursorVisible(true);
-
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mousedown', handleMouseDown);
-        window.addEventListener('mouseup', handleMouseUp);
-        window.addEventListener('mouseover', handleMouseOver);
-        window.addEventListener('touchstart', handleTouchStart);
-        window.addEventListener('touchend', handleTouchEnd);
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mousedown', handleMouseDown);
-            window.removeEventListener('mouseup', handleMouseUp);
-            window.removeEventListener('mouseover', handleMouseOver);
-            window.removeEventListener('touchstart', handleTouchStart);
-            window.removeEventListener('touchend', handleTouchEnd);
-        };
-    }, []);
+    
 
     // DOM 元素引用
     const dockRef = useRef<HTMLDivElement>(null);
@@ -233,108 +226,6 @@ function AppContent() {
         };
     }, [musicPlayer.isMusicPlaying]);
 
-    // 画中画歌词同步
-    useEffect(() => {
-        if (!musicPlayer.isPiPActive || !musicPlayer.pipRootRef.current) return;
-
-        const root = musicPlayer.pipRootRef.current;
-        root.className = `w-full h-full flex flex-col justify-center items-center overflow-hidden p-3 select-none text-center ${isDark ? 'bg-[#060606] text-white' : 'bg-[#fafafa] text-neutral-900'
-            }`;
-
-        const currentLine = musicPlayer.lyrics[musicPlayer.currentLyricIndex]?.text || ' ';
-        const parts = currentLine.split(/[（(]/);
-        const originText = parts[0]?.trim() || '';
-        const transText = parts[1]?.replace(/[)）]/g, '')?.trim() || '';
-
-        if (transText) {
-            root.innerHTML = `
-                <p style="font-family: sans-serif; font-weight: bold; font-size: 13px; letter-spacing: 0.05em; margin: 0; padding: 0 10px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 100%; line-height: 1.3;">${originText}</p>
-                <p style="font-family: sans-serif; font-size: 10px; margin-top: 4px; margin-bottom: 0; opacity: 0.6; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 100%; line-height: 1.2;">${transText}</p>
-            `;
-        } else {
-            root.innerHTML = `
-                <p style="font-family: sans-serif; font-weight: bold; font-size: 14px; letter-spacing: 0.05em; margin: 0; padding: 0 10px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 100%;">${currentLine}</p>
-            `;
-        }
-    }, [musicPlayer.currentLyricIndex, musicPlayer.lyrics, isDark, musicPlayer.isPiPActive]);
-
-    // 开启或关闭文档画中画歌词悬浮窗
-    const togglePiP = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const pip = (window as any).documentPictureInPicture;
-        if (!pip) {
-            alert("您的浏览器不支持现代的 Document Picture-in-Picture API，请尝试使用 Chrome 或 Edge 浏览器。");
-            return;
-        }
-
-        if (pip.window) {
-            pip.window.close();
-            musicPlayer.setIsPiPActive(false);
-            musicPlayer.pipRootRef.current = null;
-            return;
-        }
-
-        try {
-            const pipWindow = await pip.requestWindow({
-                width: 320,
-                height: 75
-            });
-
-            const allStyles = Array.from(document.styleSheets);
-            allStyles.forEach((styleSheet) => {
-                try {
-                    const cssRules = Array.from(styleSheet.cssRules)
-                        .map((rule) => rule.cssText)
-                        .join('');
-                    const style = pipWindow.document.createElement('style');
-                    style.textContent = cssRules;
-                    pipWindow.document.head.appendChild(style);
-                } catch {
-                    if (styleSheet.href) {
-                        const link = pipWindow.document.createElement('link');
-                        link.rel = 'stylesheet';
-                        link.href = styleSheet.href;
-                        pipWindow.document.head.appendChild(link);
-                    }
-                }
-            });
-
-            pipWindow.document.body.style.margin = '0';
-            pipWindow.document.body.style.padding = '0';
-            pipWindow.document.body.style.overflow = 'hidden';
-
-            const pipDiv = pipWindow.document.createElement('div');
-            pipDiv.className = `w-full h-full flex flex-col justify-center items-center overflow-hidden p-3 select-none text-center ${isDark ? 'bg-[#060606] text-white' : 'bg-[#fafafa] text-neutral-900'
-                }`;
-            pipWindow.document.body.appendChild(pipDiv);
-
-            musicPlayer.pipRootRef.current = pipDiv;
-            musicPlayer.setIsPiPActive(true);
-
-            const currentLine = musicPlayer.lyrics[musicPlayer.currentLyricIndex]?.text || ' ';
-            const parts = currentLine.split(/[（(]/);
-            const originText = parts[0]?.trim() || '';
-            const transText = parts[1]?.replace(/[)）]/g, '')?.trim() || '';
-            if (transText) {
-                pipDiv.innerHTML = `
-                    <p style="font-family: sans-serif; font-weight: bold; font-size: 13px; letter-spacing: 0.05em; margin: 0; padding: 0 10px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 100%; line-height: 1.3;">${originText}</p>
-                    <p style="font-family: sans-serif; font-size: 10px; margin-top: 4px; margin-bottom: 0; opacity: 0.6; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 100%; line-height: 1.2;">${transText}</p>
-                `;
-            } else {
-                pipDiv.innerHTML = `
-                    <p style="font-family: sans-serif; font-weight: bold; font-size: 14px; letter-spacing: 0.05em; margin: 0; padding: 0 10px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 100%;">${currentLine}</p>
-                `;
-            }
-
-            pipWindow.addEventListener('pagehide', () => {
-                musicPlayer.setIsPiPActive(false);
-                musicPlayer.pipRootRef.current = null;
-            });
-        } catch (err) {
-            console.error("Document Picture-in-Picture failed", err);
-        }
-    };
-
     // 快捷键监听
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -362,31 +253,32 @@ function AppContent() {
         setMousePos({ x: e.clientX, y: e.clientY });
     };
 
-    const handleDockMouseEnter = () => {
-        if (dockRef.current) {
-            setDockWidth(dockRef.current.getBoundingClientRect().width);
-        }
+    // 底部导航两阶段弹性指示器：stretch(覆盖新旧两槽) -> settle(收缩到目标槽)
+    const moveDockIndicator = (from: number, to: number) => {
+        const slots = dockRef.current?.querySelectorAll<HTMLElement>('.dock-slot');
+        if (!slots || slots.length === 0) return;
+        const slotW = slots[to].clientWidth;
+        const targetX = slots[to].offsetLeft;
+        const fromX = slots[from].offsetLeft;
+        const minX = Math.min(fromX, targetX);
+        const maxRight = Math.max(fromX + slotW, targetX + slotW);
+        // Phase 1：从当前槽拉长跨越到目标槽
+        setDockInd({ x: minX, w: maxRight - minX, phase: 'stretch' });
+        // Phase 2：下一帧切换相位，收缩到目标槽并触发弹性过渡
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                setDockInd({ x: targetX, w: slotW, phase: 'settle' });
+            });
+        });
     };
 
-    const handleDockMouseMove = (e: React.MouseEvent) => {
-        if (!dockRef.current) return;
-        const rect = dockRef.current.getBoundingClientRect();
-        setDockMouseX(e.clientX - rect.left);
-    };
-
-    // 底部浮动坞图标大小自适应缩放样式
-    const getDynamicScaleStyle = (index: number) => {
-        if (dockMouseX === null) return {};
-        const itemCenter = (index + 0.5) * (dockWidth / DOCK_PAGES.length);
-        const distance = Math.abs(dockMouseX - itemCenter);
-        const maxScale = 0.12;
-        const stdDev = 35;
-        const scale = 1 + maxScale * Math.exp(-Math.pow(distance, 2) / (2 * Math.pow(stdDev, 2)));
-        const translateY = (scale - 1) * -22;
-        return {
-            transform: `scale(${scale}) translateY(${translateY}px)`
-        };
-    };
+    // 挂载时将指示器定位到当前页面槽位
+    useEffect(() => {
+        const slots = dockRef.current?.querySelectorAll<HTMLElement>('.dock-slot');
+        if (!slots || slots.length === 0) return;
+        setDockInd({ x: slots[currentPage].offsetLeft, w: slots[currentPage].clientWidth, phase: 'settle' });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleSearch = (e: FormEvent) => {
         e.preventDefault();
@@ -429,19 +321,7 @@ function AppContent() {
             onMouseMove={handleMouseMove}
             className="min-h-screen w-full relative flex flex-col items-center justify-between pt-12 pb-28 px-6 lg:px-12 overflow-hidden bg-[#fafafa] dark:bg-[#060606] text-neutral-900 dark:text-white transition-colors duration-1000 selection:bg-neutral-200 dark:selection:bg-neutral-800"
         >
-            {/* 自定义鼠标指针 */}
-            {cursorVisible && (
-                <>
-                    <div
-                        className={`cursor-ring ${isHovering ? 'hover' : ''} ${isClicking ? 'click' : ''}`}
-                        style={{ left: cursorPos.x, top: cursorPos.y }}
-                    />
-                    <div
-                        className={`cursor-dot ${isHovering ? 'hover' : ''} ${isClicking ? 'click' : ''}`}
-                        style={{ left: cursorPos.x, top: cursorPos.y }}
-                    />
-                </>
-            )}
+            
 
             <div className={`absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-size-[40px_40px] mask-[radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none transition-opacity duration-1500 ${isMounted ? 'opacity-100' : 'opacity-0'
                 }`} />
@@ -554,9 +434,9 @@ function AppContent() {
                             >
                                 <div className="flex justify-between items-center border-b border-neutral-200/50 dark:border-neutral-800/30 pb-2.5 mb-3.5 shrink-0 select-none">
                                     <div className="flex items-center gap-1.5">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-neutral-300/80 dark:bg-neutral-700/80 bg-red-400/90 transition-colors"></span>
-                                        <span className="w-2.5 h-2.5 rounded-full bg-neutral-300/80 dark:bg-neutral-700/80 bg-yellow-400/90 transition-colors"></span>
-                                        <span className="w-2.5 h-2.5 rounded-full bg-neutral-300/80 dark:bg-neutral-700/80 bg-emerald-400/90 transition-colors"></span>
+                                        <span className="w-2.5 h-2.5 rounded-full bg-red-400/90 transition-colors"></span>
+                                        <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/90 transition-colors"></span>
+                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/90 transition-colors"></span>
                                         <span className="text-[10px] text-neutral-400 dark:text-neutral-500 ml-1.5 font-sans">Windows PowerShell 7.6.3</span>
                                     </div>
                                 </div>
@@ -718,14 +598,14 @@ function AppContent() {
                                         {weather.temp} / {weather.cond}
                                     </p>
                                     <p className="text-xs text-neutral-500 mt-1 transition-colors duration-700">
-                                        {weather.city} (IP Located)
+                                        {weather.city}
                                     </p>
                                 </div>
                             </div>
 
                             {/* 音乐播放器 */}
                             <div
-                                className={`flex flex-col p-6 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 hover:border-neutral-300 dark:hover:border-neutral-700 w-full select-none transition-all duration-700 overflow-hidden ${musicPlayer.isPlaylistOpen ? 'h-67.5' : 'h-32'
+                                className={`flex flex-col p-6 rounded-3xl bg-white/2 dark:bg-neutral-900/15 border border-neutral-200/50 dark:border-neutral-800/40 hover:border-neutral-300 dark:hover:border-neutral-700 w-full select-none transition-all duration-300 overflow-hidden ${musicPlayer.isPlaylistOpen ? 'h-67.5' : 'h-32'
                                     }`}
                             >
                                 <div className="flex items-center gap-4 w-full">
@@ -776,14 +656,16 @@ function AppContent() {
                                                 <SkipForward size={13} />
                                             </button>
                                             <button
-                                                onClick={togglePiP}
-                                                className={`p-1 rounded-md transition-colors ${musicPlayer.isPiPActive
+                                                onClick={musicPlayer.togglePlayMode}
+                                                className={`p-1 rounded-md transition-colors ${musicPlayer.playMode !== 'sequence'
                                                     ? 'text-neutral-900 dark:text-white bg-neutral-200/50 dark:bg-neutral-800'
                                                     : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
                                                     }`}
-                                                title="开启桌面原生画中画歌词"
+                                                title={musicPlayer.playMode === 'sequence' ? '顺序播放' : musicPlayer.playMode === 'single' ? '单曲循环' : '随机播放'}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" /><rect width="10" height="7" x="12" y="13" rx="1" /></svg>
+                                                {musicPlayer.playMode === 'sequence' && <Repeat size={13} />}
+                                                {musicPlayer.playMode === 'single' && <Repeat1 size={13} />}
+                                                {musicPlayer.playMode === 'shuffle' && <Shuffle size={13} />}
                                             </button>
                                             <button
                                                 onClick={() => musicPlayer.setIsPlaylistOpen(!musicPlayer.isPlaylistOpen)}
@@ -806,26 +688,34 @@ function AppContent() {
                                     </div>
                                 </div>
 
-                                {musicPlayer.isPlaylistOpen && (
-                                    <div className="flex-1 mt-4 border-t border-neutral-200/50 dark:border-neutral-800/50 pt-3 flex flex-col min-h-0">
-                                        <div className="flex gap-4 items-center border-b border-neutral-200/10 pb-1.5 shrink-0">
-                                            <div className="flex gap-4 text-[10px] uppercase tracking-wider font-semibold text-neutral-400 dark:text-neutral-500">
+                                {playlistPanelRendered && (
+                                    <div className={`flex-1 mt-4 border-t border-neutral-200/50 dark:border-neutral-800/50 pt-3 flex flex-col min-h-0 transition-opacity duration-300 ${musicPlayer.isPlaylistOpen ? 'opacity-100' : 'opacity-0'}`}>
+                                        <div className="flex gap-4 items-center pb-1.5 shrink-0">
+                                            <div ref={tabsRef} className="relative flex gap-4 text-[10px] uppercase tracking-wider font-semibold text-neutral-400 dark:text-neutral-500">
                                                 <button
+                                                    data-tab="playlist"
                                                     onClick={() => musicPlayer.setExpandedTab('playlist')}
-                                                    className={`transition-colors duration-200 ${musicPlayer.expandedTab === 'playlist' ? 'text-neutral-800 dark:text-neutral-200 border-b border-neutral-800 dark:border-neutral-200 pb-1.5' : 'hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                                                    className={`transition-colors duration-200 ${musicPlayer.expandedTab === 'playlist' ? 'text-neutral-800 dark:text-neutral-200' : 'hover:text-neutral-700 dark:hover:text-neutral-300'}`}
                                                 >
                                                     Playlist
                                                 </button>
                                                 <button
+                                                    data-tab="lyrics"
                                                     onClick={() => musicPlayer.setExpandedTab('lyrics')}
-                                                    className={`transition-colors duration-200 ${musicPlayer.expandedTab === 'lyrics' ? 'text-neutral-800 dark:text-neutral-200 border-b border-neutral-800 dark:border-neutral-200 pb-1.5' : 'hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                                                    className={`transition-colors duration-200 ${musicPlayer.expandedTab === 'lyrics' ? 'text-neutral-800 dark:text-neutral-200' : 'hover:text-neutral-700 dark:hover:text-neutral-300'}`}
                                                 >
                                                     Lyrics
                                                 </button>
+                                                {/* 滑动下划线 */}
+                                                <span
+                                                    aria-hidden
+                                                    className="absolute -bottom-1.5 h-px bg-neutral-800 dark:bg-neutral-200 transition-[left,width] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+                                                    style={{ left: underlinePos.left, width: underlinePos.width }}
+                                                />
                                             </div>
                                         </div>
 
-                                        <div className="flex-1 overflow-y-auto scrollbar-none min-h-0 pt-2">
+                                        <div key={musicPlayer.expandedTab} className={`flex-1 overflow-y-auto scrollbar-none min-h-0 pt-2 ${prevDirectionRef.current === 'right' ? 'animate-slide-x' : 'animate-slide-x-reverse'}`}>
                                             {musicPlayer.expandedTab === 'playlist' ? (
                                                 <div className="space-y-1.5">
                                                     {musicPlayer.playlist.map((song, idx) => (
@@ -953,45 +843,42 @@ function AppContent() {
             {/* 底部悬浮固定行动坞 */}
             <footer className={`fixed bottom-8 inset-x-0 flex justify-center z-30 select-none pointer-events-none transition-all duration-1200 ease-[cubic-bezier(0.16,1,0.3,1)] delay-500 ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
                 }`}>
-                <div
+                <nav
                     ref={dockRef}
-                    onMouseEnter={handleDockMouseEnter}
-                    onMouseMove={handleDockMouseMove}
-                    onMouseLeave={() => setDockMouseX(null)}
-                    className="pointer-events-auto flex items-end gap-3 px-4 py-2.5 rounded-3xl bg-white/30 dark:bg-neutral-900/20 backdrop-blur-2xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-2xl transition-all duration-700 hover:py-3"
+                    className="dock pointer-events-auto bg-white/60 dark:bg-black/30 border border-neutral-200/50 dark:border-neutral-800/50 shadow-2xl"
+                    style={{ '--dock-slot': '44px', '--dock-gap': '5px', '--dock-pad': '7px 8px' } as CSSProperties}
                 >
-                    {DOCK_PAGES.map((item, i) => {
+                    {DOCK_PAGES.map((item) => {
                         const isActive = currentPage === item.id;
 
                         return (
-                            <div
+                            <button
                                 key={item.name}
-                                style={getDynamicScaleStyle(i)}
-                                className="group flex flex-col items-center justify-end origin-bottom transition-all duration-200 ease-out"
+                                type="button"
+                                onClick={() => {
+                                    if (currentPage !== item.id) {
+                                        moveDockIndicator(currentPage, item.id);
+                                        navigate(item.path);
+                                    }
+                                }}
+                                className={`dock-slot flex items-center justify-center rounded-full transition-all duration-300 ${isActive
+                                    ? 'text-neutral-700 dark:text-white'
+                                    : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-200'
+                                    }`}
+                                title={item.name}
                             >
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (currentPage !== item.id) {
-                                            navigate(item.path);
-                                        }
-                                    }}
-                                    className={`p-3.5 rounded-2xl relative transition-all duration-300 ${isActive
-                                        ? 'bg-white dark:bg-neutral-800 text-neutral-950 dark:text-neutral-50 shadow-lg shadow-neutral-200/50 dark:shadow-neutral-950/50 border border-neutral-200/60 dark:border-neutral-700/60'
-                                        : 'bg-white/10 dark:bg-neutral-950/20 text-neutral-400 dark:text-neutral-500 hover:bg-white/40 dark:hover:bg-neutral-800/40 hover:text-neutral-950 dark:hover:text-neutral-100 border border-transparent hover:border-neutral-200/30 dark:hover:border-neutral-800/30'
-                                        }`}
-                                    title={item.name}
-                                >
-                                    <item.icon size={18} className={`transition-transform duration-300 ${isActive ? 'scale-110' : ''}`} />
-
-                                    <span className="absolute -top-12 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-neutral-900/90 dark:bg-neutral-100/90 text-[10px] text-white dark:text-neutral-900 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 shadow-md font-medium whitespace-nowrap scale-75 group-hover:scale-100 z-20">
-                                        {item.name}
-                                    </span>
-                                </button>
-                            </div>
+                                <item.icon size={20} className="transition-transform duration-300" />
+                            </button>
                         );
                     })}
-                </div>
+                    {/* 两阶段弹性指示器：激活槽位背景胶囊拉长覆盖两槽 -> 弹性收缩到目标槽 */}
+                    <span
+                        aria-hidden
+                        data-phase={dockInd.phase}
+                        className="dock-ind bg-neutral-950/10 dark:bg-white/10"
+                        style={{ transform: `translateX(${dockInd.x}px)`, width: dockInd.w }}
+                    />
+                </nav>
             </footer>
 
         </div>

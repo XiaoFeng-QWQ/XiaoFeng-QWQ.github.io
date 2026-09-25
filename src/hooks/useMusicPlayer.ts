@@ -2,33 +2,64 @@ import { useState, useEffect, useRef } from 'react';
 import type { Song, MusicInfo, LyricLine } from '../types';
 import { parseLRC } from '../utils/terminalHelpers';
 
+export type PlayMode = 'sequence' | 'single' | 'shuffle';
+
+// 播放器全量状态存储 Key
+const MUSIC_STATE_KEY = 'musicPlayerState';
+
+// 播放器持久化状态结构
+interface PersistedMusicState {
+    playlist: Song[];
+    playlistIndex: number;
+    isPlaylistOpen: boolean;
+    expandedTab: 'playlist' | 'lyrics';
+    playMode: PlayMode;
+    isMusicPlaying: boolean;
+}
+
+// 从 localStorage 读取并校验持久化状态
+const loadPersistedState = (): Partial<PersistedMusicState> | null => {
+    try {
+        const raw = localStorage.getItem(MUSIC_STATE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as Partial<PersistedMusicState>;
+    } catch (e) {
+        console.error('Failed to load music player state', e);
+        return null;
+    }
+};
+
 /**
  * 音乐播放器 Hook
- * 提供音乐播放控制、歌词同步、画中画等功能
+ * 提供音乐播放控制、歌词同步、播放顺序等功能
+ * 支持全量状态持久化到 localStorage，刷新页面后恢复播放现场
  */
 export const useMusicPlayer = (_currentPage: number) => {
-    const [playlist, setPlaylist] = useState<Song[]>([]);
-    const [playlistIndex, setPlaylistIndex] = useState(0);
-    const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
-    const [expandedTab, setExpandedTab] = useState<'playlist' | 'lyrics'>('playlist');
+    // 初始化时优先加载持久化状态
+    const [restored] = useState<Partial<PersistedMusicState> | null>(() => loadPersistedState());
+    const [playlist, setPlaylist] = useState<Song[]>(restored?.playlist ?? []);
+    const [playlistIndex, setPlaylistIndex] = useState(restored?.playlistIndex ?? 0);
+    const [isPlaylistOpen, setIsPlaylistOpen] = useState(restored?.isPlaylistOpen ?? false);
+    const [expandedTab, setExpandedTab] = useState<'playlist' | 'lyrics'>(restored?.expandedTab ?? 'playlist');
     const [musicInfo, setMusicInfo] = useState<MusicInfo>({
         name: 'Loading...',
         artist: 'Please wait',
         pic: '',
         url: ''
     });
-    const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+    const [isMusicPlaying, setIsMusicPlaying] = useState(restored?.isMusicPlaying ?? false);
+    const [playMode, setPlayMode] = useState<PlayMode>(restored?.playMode ?? 'sequence');
 
-    // 歌词及画中画状态
+    // 歌词状态
     const [lyrics, setLyrics] = useState<LyricLine[]>([]);
     const [audioCurrentTime, setAudioCurrentTime] = useState(0);
     const [currentLyricIndex, setCurrentLyricIndex] = useState(-1);
-    const [isPiPActive, setIsPiPActive] = useState(false);
 
     // DOM 元素引用
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lyricsContainerRef = useRef<HTMLDivElement>(null);
-    const pipRootRef = useRef<HTMLDivElement | null>(null);
 
     // 音频分析器引用
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -40,6 +71,24 @@ export const useMusicPlayer = (_currentPage: number) => {
     useEffect(() => {
         isPlayingRef.current = isMusicPlaying;
     }, [isMusicPlaying]);
+
+    // 全量状态持久化：任意关键状态变化时写入 localStorage
+    useEffect(() => {
+        if (!playlist || playlist.length === 0) return;
+        try {
+            const state: PersistedMusicState = {
+                playlist,
+                playlistIndex,
+                isPlaylistOpen,
+                expandedTab,
+                playMode,
+                isMusicPlaying
+            };
+            localStorage.setItem(MUSIC_STATE_KEY, JSON.stringify(state));
+        } catch (e) {
+            console.error('Failed to save music player state', e);
+        }
+    }, [playlist, playlistIndex, isPlaylistOpen, expandedTab, playMode, isMusicPlaying]);
 
     // 初始化音频频谱分析器
     const initAnalyser = () => {
@@ -72,6 +121,10 @@ export const useMusicPlayer = (_currentPage: number) => {
 
     // 获取歌单列表
     useEffect(() => {
+        // 已有持久化的歌单状态时，跳过覆盖，以保留播放现场
+        if (restored?.playlist && restored.playlist.length > 0) {
+            return;
+        }
         fetch('https://api.xiaofengqwq.com/api/v1/music/playlist?server=netease&id=6634356386')
             .then(r => r.json())
             .then(res => {
@@ -144,13 +197,26 @@ export const useMusicPlayer = (_currentPage: number) => {
 
             const audio = new Audio(musicInfo.url);
             audio.crossOrigin = "anonymous";
-            audio.loop = true;
+            audio.loop = playMode === 'single';
 
             const handleTimeUpdate = () => {
                 setAudioCurrentTime(audio.currentTime);
             };
 
+            const handleEnded = () => {
+                if (playMode === 'single') {
+                    return;
+                }
+                if (playMode === 'shuffle') {
+                    const randomIndex = Math.floor(Math.random() * playlist.length);
+                    setPlaylistIndex(randomIndex);
+                } else {
+                    setPlaylistIndex(prev => (prev + 1) % playlist.length);
+                }
+            };
+
             audio.addEventListener('timeupdate', handleTimeUpdate);
+            audio.addEventListener('ended', handleEnded);
             audioRef.current = audio;
 
             if (isMusicPlaying) {
@@ -160,6 +226,7 @@ export const useMusicPlayer = (_currentPage: number) => {
 
             return () => {
                 audio.removeEventListener('timeupdate', handleTimeUpdate);
+                audio.removeEventListener('ended', handleEnded);
                 audio.pause();
             };
         }
@@ -260,6 +327,15 @@ export const useMusicPlayer = (_currentPage: number) => {
         }
     };
 
+    // 切换播放模式
+    const togglePlayMode = () => {
+        setPlayMode(prev => {
+            if (prev === 'sequence') return 'single';
+            if (prev === 'single') return 'shuffle';
+            return 'sequence';
+        });
+    };
+
     // 返回所有状态和方法
     return {
         playlist,
@@ -273,10 +349,8 @@ export const useMusicPlayer = (_currentPage: number) => {
         setIsMusicPlaying,
         lyrics,
         currentLyricIndex,
-        isPiPActive,
-        setIsPiPActive,
+        playMode,
         lyricsContainerRef,
-        pipRootRef,
         audioRef,
         audioContextRef,
         analyserRef,
@@ -285,6 +359,7 @@ export const useMusicPlayer = (_currentPage: number) => {
         handleNextTrack,
         handlePrevTrack,
         selectSong,
+        togglePlayMode,
         initAnalyser
     };
 };

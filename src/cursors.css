@@ -1,0 +1,170 @@
+:root {
+    --cursor-pointer: url('/cursors/light/pointer.cur');
+    --cursor-beam: url('/cursors/light/beam.cur');
+    --cursor-move: url('/cursors/light/move.cur');
+    --cursor-horz: url('/cursors/light/horz.cur');
+    --cursor-vert: url('/cursors/light/vert.cur');
+    --cursor-dgn1: url('/cursors/light/dgn1.cur');
+    --cursor-dgn2: url('/cursors/light/dgn2.cur');
+    --cursor-link: url('/cursors/light/link.cur');
+    --cursor-help: url('/cursors/light/help.cur');
+    --cursor-alternate: url('/cursors/light/alternate.cur');
+    --cursor-handwriting: url('/cursors/light/handwriting.cur');
+    --cursor-person: url('/cursors/light/person.cur');
+    --cursor-pin: url('/cursors/light/pin.cur');
+    --cursor-precision: url('/cursors/light/precision.cur');
+    --cursor-unavailable: url('/cursors/light/unavailable.cur');
+}
+
+.dark {
+    --cursor-pointer: url('/cursors/dark/pointer.cur');
+    --cursor-beam: url('/cursors/dark/beam.cur');
+    --cursor-move: url('/cursors/dark/move.cur');
+    --cursor-horz: url('/cursors/dark/horz.cur');
+    --cursor-vert: url('/cursors/dark/vert.cur');
+    --cursor-dgn1: url('/cursors/dark/dgn1.cur');
+    --cursor-dgn2: url('/cursors/dark/dgn2.cur');
+    --cursor-link: url('/cursors/dark/link.cur');
+    --cursor-help: url('/cursors/dark/help.cur');
+    --cursor-alternate: url('/cursors/dark/alternate.cur');
+    --cursor-handwriting: url('/cursors/dark/handwriting.cur');
+    --cursor-person: url('/cursors/dark/person.cur');
+    --cursor-pin: url('/cursors/dark/pin.cur');
+    --cursor-precision: url('/cursors/dark/precision.cur');
+    --cursor-unavailable: url('/cursors/dark/unavailable.cur');
+}
+
+body {
+    cursor: url('/cursors/light/pointer.cur'), url('/cursors/dark/pointer.cur'), default !important;
+}
+
+.dark body {
+    cursor: url('/cursors/dark/pointer.cur'), url('/cursors/light/pointer.cur'), default !important;
+}
+
+a,
+button,
+button *,
+button svg,
+button path,
+[role="button"],
+[role="button"] *,
+.clickable,
+.clickable *,
+footer,
+footer *,
+footer>div,
+footer>div *,
+footer button,
+footer button *,
+footer button svg,
+footer button path,
+.cursor-pointer,
+.cursor-pointer *,
+svg,
+path {
+    cursor: url('/cursors/light/link.cur'), url('/cursors/dark/link.cur'), pointer !important;
+}
+
+.dark a,
+.dark button,
+.dark button *,
+.dark button svg,
+.dark button path,
+.dark [role="button"],
+.dark [role="button"] *,
+.dark .clickable,
+.dark .clickable *,
+.dark footer,
+.dark footer *,
+.dark footer>div,
+.dark footer>div *,
+.dark footer button,
+.dark footer button *,
+.dark footer button svg,
+.dark footer button path,
+.dark .cursor-pointer,
+.dark .cursor-pointer *,
+.dark svg,
+.dark path {
+    cursor: url('/cursors/dark/link.cur'), url('/cursors/light/link.cur'), pointer !important;
+}
+
+input,
+input *,
+textarea,
+textarea *,
+.terminal-area,
+.terminal-area * {
+    cursor: url('/cursors/light/beam.cur'), url('/cursors/dark/beam.cur'), text !important;
+}
+
+.dark input,
+.dark input *,
+.dark textarea,
+.dark textarea *,
+.dark .terminal-area,
+.dark .terminal-area * {
+    cursor: url('/cursors/dark/beam.cur'), url('/cursors/light/beam.cur'), text !important;
+}
+
+*[draggable="true"],
+.dragging {
+    cursor: url('/cursors/light/move.cur'), url('/cursors/dark/move.cur'), move !important;
+}
+
+.dark *[draggable="true"],
+.dark .dragging {
+    cursor: url('/cursors/dark/move.cur'), url('/cursors/light/move.cur'), move !important;
+}
+
+.resizer-horz {
+    cursor: url('/cursors/light/horz.cur'), url('/cursors/dark/horz.cur'), col-resize !important;
+}
+
+.resizer-vert {
+    cursor: url('/cursors/light/vert.cur'), url('/cursors/dark/vert.cur'), row-resize !important;
+}
+
+.resizer-dgn1 {
+    cursor: url('/cursors/light/dgn1.cur'), url('/cursors/dark/dgn1.cur'), nwse-resize !important;
+}
+
+.resizer-dgn2 {
+    cursor: url('/cursors/light/dgn2.cur'), url('/cursors/dark/dgn2.cur'), nesw-resize !important;
+}
+
+[title*="help"],
+[role="help"],
+.help-cursor {
+    cursor: url('/cursors/light/help.cur'), url('/cursors/dark/help.cur'), help !important;
+}
+
+.select-alternate {
+    cursor: url('/cursors/light/alternate.cur'), url('/cursors/dark/alternate.cur'), crosshair !important;
+}
+
+[contenteditable="true"],
+.text-editor {
+    cursor: url('/cursors/light/handwriting.cur'), url('/cursors/dark/handwriting.cur'), text !important;
+}
+
+.picker,
+.select-person {
+    cursor: url('/cursors/light/person.cur'), url('/cursors/dark/person.cur'), pointer !important;
+}
+
+.map-pin,
+.pin-cursor {
+    cursor: url('/cursors/light/pin.cur'), url('/cursors/dark/pin.cur'), pointer !important;
+}
+
+.precision-select {
+    cursor: url('/cursors/light/precision.cur'), url('/cursors/dark/precision.cur'), crosshair !important;
+}
+
+.disabled,
+[disabled],
+.unavailable {
+    cursor: url('/cursors/light/unavailable.cur'), url('/cursors/dark/unavailable.cur'), not-allowed !important;
+}

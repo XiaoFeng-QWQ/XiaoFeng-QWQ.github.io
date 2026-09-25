@@ -23,7 +23,8 @@ export const getLangColor = (lang: string) => {
         HTML: 'bg-orange-500',
         CSS: 'bg-indigo-500',
         Vue: 'bg-emerald-500',
-        Python: 'bg-blue-400'
+        Python: 'bg-blue-400',
+        PHP: 'bg-pink-500',
     };
     return colors[lang] || 'bg-neutral-400';
 };
